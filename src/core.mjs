@@ -8,27 +8,27 @@ const emptyRow = () => Array(WIDTH).fill(null);
 const rankMap = defs => Object.fromEntries(Object.keys(defs).map(k => [k, 0]));
 
 export const UPGRADES = {
-  single: { label: '단일 집중', max: 3, description: r => `1줄 제거 피해 +${40*r}%` },
-  middle: { label: '중간 정리', max: 3, description: r => `2~3줄 제거 피해 +${20*r}%` },
-  compress: { label: '압축 타격', max: 3, description: r => `4줄 제거 피해 +${35*r}%` },
-  repeat: { label: '연속 압축', max: 3, description: r => `연속 4줄 제거 피해 +${25*r}%. 사이의 비제거는 허용` },
-  combo: { label: '연쇄 증폭', max: 3, description: r => `연쇄 단계당 보너스 ${15+4*r}%. 최대 5단계 추가` },
-  grace: { label: '연쇄 유예', max: 1, description: () => '한 연쇄에서 비제거 고정 1회 허용. 제거할 때마다 회복되지 않음' },
-  charge: { label: '비제거 충전', max: 3, description: r => `비제거마다 전하 1. 최대 4개, 전하당 피해 ${3+r}` },
-  convert: { label: '전환', max: 3, description: r => `3연쇄 이상 종료 시 ⌊연쇄/2⌋+${r-1} 전하 획득` },
-  high: { label: '고도', max: 3, description: r => `제거 직전 최고 높이 12 이상이면 피해 +${35*r}%` },
-  low: { label: '저상', max: 3, description: r => `제거 직전 최고 높이 6 이하면 피해 +${15*r}%` },
-  opening: { label: '개시', max: 3, description: r => `각 전투의 첫 두 제거에 고정 피해 +${6*r}` },
-  repair: { label: '수복', max: 3, description: r => `전투당 ${r}회, 2~3줄 제거 시 방해 1행 추가 정리 (6고정 간격)` }
+  single: { label: '단일 집중', max: 3, trigger:'1줄 제거', description:r=>`한 번에 1줄을 지울 때 줄 제거 피해 +${40*r}%.`, example:r=>`다른 효과가 없다면 1줄 피해 10이 ${Math.floor(10*(1+.4*r)+.5)}으로 증가합니다.` },
+  middle: { label: '중간 정리', max: 3, trigger:'2~3줄 동시 제거', description:r=>`한 번에 2줄 또는 3줄을 지울 때 줄 제거 피해 +${20*r}%.`, example:r=>`다른 효과가 없다면 2줄 피해 24가 ${Math.floor(24*(1+.2*r)+.5)}으로 증가합니다. 1줄과 4줄에는 적용되지 않습니다.` },
+  compress: { label: '압축 타격', max: 3, trigger:'4줄 동시 제거', description:r=>`한 번에 4줄을 지울 때 줄 제거 피해 +${35*r}%.`, example:r=>`다른 효과가 없다면 4줄 피해 64가 ${Math.floor(64*(1+.35*r)+.5)}로 증가합니다.` },
+  repeat: { label: '연속 압축', max: 3, trigger:'지난 제거도 4줄', description:r=>`마지막으로 지운 줄이 4줄이었다면, 이번 4줄 제거 피해 +${25*r}%.`, example:()=>`4줄 제거 → 줄을 못 지움 → 4줄 제거: 적용됩니다. 4줄 제거 → 1줄 제거 → 4줄 제거: 적용되지 않습니다.` },
+  combo: { label: '연쇄 증폭', max: 3, trigger:'블록을 놓을 때마다 연속 제거', description:r=>`연쇄 피해 보너스가 단계당 15%에서 ${15+4*r}%로 증가합니다. 6연쇄부터는 더 늘지 않습니다.`, example:r=>`다른 효과가 없다면 1/2/3연쇄의 줄 제거 피해 배율은 100/${115+4*r}/${130+8*r}%입니다. 줄을 못 지우면 연쇄가 끝납니다.` },
+  grace: { label: '연쇄 유예', max: 1, trigger:'한 연쇄에 실수 1회 허용', description:()=>`한 연쇄에서 줄을 못 지우는 블록을 딱 한 번 허용합니다.`, example:()=>`제거 → 실패 → 제거 → 실패: 마지막 실패에서 연쇄가 끝납니다. 중간에 줄을 지워도 허용 횟수는 회복되지 않습니다.` },
+  charge: { label: '비제거 충전', max: 3, trigger:'못 지우면 저장, 지우면 사용', description:r=>`줄을 못 지우면 전하 1개 저장. 다음 줄 제거에 모두 써서 전하당 피해 +${3+r}. 최대 4개 저장.`, example:r=>`전하 3개를 모은 뒤 줄을 지우면 피해 +${3*(3+r)}를 더하고 전하는 0개가 됩니다. 추가 피해에도 보스 방어와 감쇠가 적용됩니다.` },
+  convert: { label: '전환', max: 3, trigger:'3연쇄 이상이 끊겼을 때', description:r=>`3연쇄 이상에서 줄을 못 지워 연쇄가 끝나면 전하를 얻습니다. 3연쇄 종료 시 ${r}개, 4연쇄 종료 시 ${Math.min(4,r+1)}개.`, example:r=>`획득량은 연쇄 수를 2로 나눈 몫 + ${r-1}이며 최대 4개입니다. 연쇄 유예로 이어진 경우에는 아직 발동하지 않습니다. 다른 충전 효과와 함께 적용될 수 있습니다.` },
+  high: { label: '고도', max: 3, trigger:'지우기 전 높이 12칸 이상', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 12칸 이상이면 줄 제거 피해 +${35*r}%.`, example:()=>`높이는 바닥부터 가장 높은 블록까지 셉니다. 이번에 놓은 블록도 포함합니다. 지운 뒤 높이가 낮아져도 이번 공격에는 적용됩니다.` },
+  low: { label: '저상', max: 3, trigger:'지우기 전 높이 6칸 이하', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 6칸 이하면 줄 제거 피해 +${15*r}%.`, example:()=>`이번 블록을 놓은 뒤 최고 높이가 6칸이면 적용, 7칸이면 미적용입니다. 줄을 지운 뒤의 높이를 기준으로 삼지 않습니다.` },
+  opening: { label: '개시', max: 3, trigger:'전투 첫 두 번의 줄 제거', description:r=>`각 전투의 첫 두 번 줄 제거에 추가 피해 +${6*r}. 보스 방어와 감쇠가 적용됩니다.`, example:r=>`블록을 여러 개 놓았어도 아직 줄을 못 지웠다면 횟수는 남습니다. 첫 제거와 두 번째 제거에 각각 +${6*r}, 세 번째부터는 추가하지 않습니다.` },
+  repair: { label: '수복', max: 3, trigger:'2~3줄 동시 제거 + 회색 행 존재', description:r=>`2줄 또는 3줄을 동시에 지우면, 가장 아래의 회색 방해 행을 1개 더 없앱니다. 전투당 ${r}회, 재사용까지 블록 6개.`, example:()=>`추가로 없앤 회색 행에는 공격 피해나 연쇄가 붙지 않습니다. 지울 방해 행이 없으면 사용 횟수를 소비하지 않습니다.` }
 };
 
 export const BURDENS = {
-  vitality: { label: '증식', max: 3, description: r => `이후 보스 최대 체력 +${8*r}%` },
-  dampen: { label: '감쇠', max: 3, description: r => `전체 공격 피해 -${4*r}%` },
-  haste: { label: '조급', max: 3, description: r => `보스 공격 주기 ${r}고정 단축. 노출 기회도 달라짐` },
-  erosion: { label: '침식', max: 3, description: r => `각 전투 첫 ${r}회 고정 뒤 방해 행 1개씩 추가` },
-  regen: { label: '재생', max: 3, description: r => `보스 공격 뒤 최대 체력의 ${0.5*r}% 회복` },
-  rigidity: { label: '경직', max: 3, description: r => `고정 유예 ${500-35*r}ms (기준 500ms)` }
+  vitality: { label:'증식',max:3,description:r=>`이후 보스의 최대 체력이 기본보다 ${8*r}% 증가합니다.`,example:r=>`기본 체력 1000인 보스가 ${1000+80*r}으로 시작합니다.` },
+  dampen: { label:'감쇠',max:3,description:r=>`내가 보스에게 주는 모든 피해가 ${4*r}% 감소합니다.`,example:r=>`다른 계산을 마친 피해가 100이라면 최종 피해는 ${100-4*r}입니다.` },
+  haste: { label:'조급',max:3,description:r=>`보스가 공격하기까지 놓을 수 있는 블록이 ${r}개 줄어듭니다. 낙하 속도는 그대로입니다.`,example:r=>`원래 블록 9개마다 공격했다면 ${9-r}개마다 공격합니다. 방어 보스의 노출 기회도 달라집니다.` },
+  erosion: { label:'침식',max:3,description:r=>`각 전투에서 처음 놓는 블록 ${r}개에 각각 회색 방해 행 1개가 추가됩니다.`,example:r=>`전투 시작 후 처음 ${r}개를 놓는 동안 총 ${r}행이 올라옵니다. 일반 보스 공격과 별도로 적용됩니다.` },
+  regen: { label:'재생',max:3,description:r=>`보스가 공격할 때마다 자신의 최대 체력의 ${.5*r}%를 회복합니다.`,example:r=>`최대 체력 1000인 보스는 한 번 공격할 때 ${5*r}을 회복합니다. 침식으로 행이 올라올 때에는 회복하지 않습니다.` },
+  rigidity: { label:'경직',max:3,description:r=>`착지한 블록이 자동으로 굳기까지의 시간이 500ms에서 ${500-35*r}ms로 줄어듭니다.`,example:()=>`바닥에서 옆으로 밀거나 회전시킬 시간이 줄어듭니다. 즉시 낙하의 동작은 그대로입니다.` }
 };
 
 export const STAGES = [
@@ -124,7 +124,7 @@ export class Game {
       tags:Array(HEIGHT).fill(null), active:null, queue:[], held:null, canHold:true,
       upgrades:rankMap(UPGRADES), burdens:rankMap(BURDENS), offers:[],
       stats:{locks:0,lines:0,damage:0,seconds:0,cleared:0,maxCombo:0},
-      combo:0,charge:0,repairLeft:0,reason:'',tick:0,history:[]
+      combo:0,charge:0,repairLeft:0,reason:'',death:null,tick:0,history:[]
     };
     this._beginStage();
   }
@@ -143,11 +143,12 @@ export class Game {
   _spawn(type=this._take()) {
     this.state.active={type,rotation:0,x:3,y:-1};
     this._fall=0; this._lockTime=0; this._lockResets=0;
-    if (this._collides(this.state.active)) this._die('새 블록이 들어올 공간이 없습니다.');
+    if (this._collides(this.state.active)) this._die('새 블록이 들어올 공간이 없습니다.',{kind:'spawn',cells:cells(this.state.active)});
   }
-  _die(reason) {
+  _die(reason,detail={}) {
     if (this.state.status==='dead'||this.state.status==='won') return;
     this.state.status='dead';this.state.reason=reason;
+    this.state.death={kind:detail.kind||'other',cells:(detail.cells||[]).map(p=>p.slice())};
     this._emit('death',{reason});
   }
   _config() {
@@ -162,7 +163,7 @@ export class Game {
     const s=this.state, cfg=STAGES[s.stage-1];
     // Each sector is a fresh battle. Only the run's build and record persist.
     s.board=Array.from({length:HEIGHT},emptyRow);s.tags=Array(HEIGHT).fill(null);
-    s.active=null;s.held=null;s.queue=[];
+    s.active=null;s.held=null;s.queue=[];s.death=null;s.reason='';
     this._pieces=rng(this.seed+':pieces:'+s.stage);
     this._fillQueue();
     const hp=round(cfg.hp*(1+0.08*s.burdens.vitality));
@@ -291,7 +292,8 @@ export class Game {
     }
     s.board=ext.slice(4);s.tags=tags.slice(4);s.active=null;
     if(ext.slice(0,4).some(r=>r.some(c=>c!==null))) {
-      this._die('정리 후에도 블록이 상단을 넘었습니다.');return;
+      const outside=ext.slice(0,4).flatMap((row,y)=>row.flatMap((c,x)=>c===null?[]:[[x,y-4]]));
+      this._die('정리 후에도 블록이 상단을 넘었습니다.',{kind:'lockout',cells:outside});return;
     }
     this._emit('lock',{lines:L});
     if(L>0) {
@@ -351,11 +353,12 @@ export class Game {
   _insertRows(holes) {
     const s=this.state;
     for(const hole of holes) {
-      const overflow=s.board[0].some(c=>c!==null);
+      const pushed=s.board[0].flatMap((c,x)=>c===null?[]:[[x,0]]);
+      const overflow=pushed.length>0;
       s.board.shift();s.tags.shift();
       const row=Array(WIDTH).fill('G');row[hole]=null;
       s.board.push(row);s.tags.push(++this._rowId);
-      if(overflow){this._die('방해 행이 쌓여 보드가 넘쳤습니다.');return false;}
+      if(overflow){this._die('방해 행이 쌓여 보드가 넘쳤습니다.',{kind:'garbage',cells:pushed});return false;}
     }
     return true;
   }

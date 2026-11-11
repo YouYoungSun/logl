@@ -2,6 +2,7 @@ import {Game,STAGES,UPGRADES,BURDENS,cells,SHAPES,RULES_VERSION} from './core.mj
 import {drawBoss,bossAnchor} from './boss-art.mjs';
 import {Effects} from './fx.mjs';
 import {AudioDirector} from './audio.mjs';
+import {DeathReview} from './death-review.mjs';
 
 const $=id=>document.getElementById(id);
 const canvas=$('gameCanvas'),ctx=canvas.getContext('2d');
@@ -13,6 +14,7 @@ function readStore(key,fallback){try{return JSON.parse(localStorage.getItem(key)
 function writeStore(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}
 let sound=readStore('faultline.sound',true),reduced=readStore('faultline.motion',matchMedia('(prefers-reduced-motion: reduce)').matches);
 const audio=new AudioDirector(sound),fx=new Effects(audio);
+const review=new DeathReview(),physicalKeys=new Set(),physicalPointers=new Set();
 let game=null,paused=false,modalKind='',saved=false,lastTime,acc=0,previousStatus='',uiTimer=0,toastUntil=0;
 let hpTrail=0,pendingHp=[],recordedActions=[],direction=0,dirAge=0,dirRepeats=0;
 const pressed=new Set();
@@ -27,14 +29,25 @@ function toast(text){$('toast').textContent=text;$('toast').classList.add('show'
 function clearInput(){pressed.clear();direction=0;dirAge=0;dirRepeats=0;acc=0;}
 function modal(html,kind,narrow=false){modalKind=kind;$('modalContent').className='modal-content'+(narrow?' narrow':'');$('modalContent').innerHTML=html;$('modal').hidden=false;clearInput();}
 function closeModal(){modalKind='';$('modal').hidden=true;clearInput();lastTime=undefined;canvas.focus({preventScroll:true});}
+function resetReview(){review.close();$('deathNotice').hidden=true;}
+function beginDeathReview(){
+  if(review.active||!game||game.state.status!=='dead')return;
+  previousStatus='dead';paused=true;review.open(physicalKeys,physicalPointers);
+  clearInput();audio.stop();closeModal();saveRecord();
+  $('deathReason').textContent=game.state.reason;
+  const kind=game.state.death?.kind;
+  $('deathHint').textContent=kind==='garbage'?'회색 행이 올라오며 상단의 블록이 밀려났습니다. 위쪽 붉은 표시를 확인하세요.':kind==='spawn'?'새 블록과 쌓인 블록이 겹친 위치를 붉게 표시했습니다.':kind==='lockout'?'줄을 정리한 뒤에도 남은 블록이 천장을 넘었습니다. 붉은 상단 표시를 확인하세요.':'보드는 사망한 상태로 멈춰 있습니다.';
+  $('deathNotice').hidden=false;$('deathContinue').focus({preventScroll:true});
+}
+function finishDeathReview(){resetReview();showResult();}
 function randomSeed(){try{const n=new Uint32Array(1);crypto.getRandomValues(n);return n[0].toString(36).toUpperCase();}catch{return Date.now().toString(36).toUpperCase();}}
 export function startRun(seed){
   const value=(seed??$('seedInput').value).trim()||randomSeed();
-  game=new Game(value);fx.reset(1);saved=false;paused=false;previousStatus='playing';recordedActions=[];
+  resetReview();game=new Game(value);fx.reset(1);saved=false;paused=false;previousStatus='playing';recordedActions=[];
   pendingHp=[];hpTrail=game.state.boss.maxHp;clearInput();closeModal();$('startScreen').hidden=true;
   audio.unlock();updateUi();canvas.focus({preventScroll:true});
 }
-function goHome(){game=null;paused=false;previousStatus='';fx.reset(0);closeModal();$('startScreen').hidden=false;updateUi();}
+function goHome(){resetReview();game=null;paused=false;previousStatus='';fx.reset(0);closeModal();$('startScreen').hidden=false;updateUi();}
 function act(action){
   if(!game||paused||modalKind||game.state.status!=='playing')return false;
   const ok=game.act(action);if(ok){recordedActions.push({tick:game.tick,action});if(action==='hold')audio.play('hold');}
@@ -46,7 +59,7 @@ function onEvents(events){
     if(e.type==='clear')pendingHp.push({at:fx.time+.18,hp:e.hpAfter});
     if(e.type==='lock'&&!e.lines)audio.play('lock');
     if(e.type==='bossAttack'&&e.regen)hpTrail=Math.max(hpTrail,game.state.boss.hp);
-    if(e.type==='death')$('liveStatus').textContent=e.reason;
+    if(e.type==='death'){$('liveStatus').textContent=e.reason;beginDeathReview();}
     if(e.type==='stageClear')$('liveStatus').textContent=`${e.stage}구역 돌파`;
   }
 }
@@ -64,14 +77,17 @@ function pause(){
 }
 function resume(){paused=false;closeModal();audio.unlock();}
 function tags(state){return Object.entries(state.upgrades).filter(([,r])=>r).map(([k,r])=>`<span class="tag">${UPGRADES[k].label} ${r}</span>`).join('')+Object.entries(state.burdens).filter(([,r])=>r).map(([k,r])=>`<span class="tag bad">${BURDENS[k].label} ${r}</span>`).join('');}
+function example(def,rank){return def.example?`<details class="ability-example"><summary>예시 보기</summary><p>${esc(def.example(rank))}</p></details>`:'';}
+function glossary(){return '<details class="ability-glossary"><summary>기본 용어 보기</summary><p><b>고정:</b> 떨어지던 블록을 놓아 위치가 확정되는 것.<br><b>연쇄:</b> 블록을 놓을 때마다 계속 줄을 지우는 것. 기본적으로 한 번 못 지우면 끝납니다.<br><b>전하:</b> 다음 줄 제거에 모두 사용하는 추가 공격 자원. 최대 4개.<br><b>높이:</b> 바닥부터 가장 높은 블록까지의 칸 수. 이번에 놓을 블록도 포함해 판정합니다.</p></details>';}
 function showReward(){
   const s=game.state,next=STAGES[s.stage];
   const cards=s.offers.map((o,i)=>{
     const ur=s.upgrades[o.upgrade]+1,br=s.burdens[o.burden]+1;
     const b={...s.burdens,[o.burden]:br},hp=Math.floor(next.hp*(1+.08*b.vitality)+.5),K=Math.max(4,next.K-b.haste);
-    return `<button class="reward-card" data-choice="${i}"><div class="card-index">CHOICE 0${i+1}<span class="card-level">LV ${s.upgrades[o.upgrade]} → ${ur}</span></div><h3>${UPGRADES[o.upgrade].label}</h3><p class="card-description">${UPGRADES[o.upgrade].description(ur)}</p><div class="burden-block"><b>＋ ${BURDENS[o.burden].label} ${s.burdens[o.burden]} → ${br}</b><p>${BURDENS[o.burden].description(br)}</p></div><div class="card-preview">다음 보스 HP ${hp.toLocaleString()} / ${K}고정 주기<br>초기 침식 ${b.erosion}행 · 피해 ×${(1-.04*b.dampen).toFixed(2)}</div><div class="pick-label">이 선택을 누적하기 <span>↗</span></div></button>`;
+    const u=UPGRADES[o.upgrade],risk=BURDENS[o.burden];
+    return `<article class="reward-card" aria-labelledby="reward-title-${i}"><div class="card-index">CHOICE 0${i+1}<span class="card-level">LV ${s.upgrades[o.upgrade]} → ${ur}</span></div><h3 id="reward-title-${i}">${u.label}</h3><span class="condition-tag">${u.trigger}</span><p class="card-description">${u.description(ur)}</p>${example(u,ur)}<div class="burden-block"><b>＋ ${risk.label} ${s.burdens[o.burden]} → ${br}</b><p>${risk.description(br)}</p>${example(risk,br)}</div><div class="card-preview">다음 보스 HP ${hp.toLocaleString()} / 블록 ${K}개마다 공격<br>전투 시작 후 침식 ${b.erosion}행 · 내 피해 ×${(1-.04*b.dampen).toFixed(2)}</div><button class="pick-label" type="button" data-choice="${i}">이 개조와 위험 선택 <span>↗</span></button></article>`;
   }).join('');
-  modal(`<div class="reward-top"><div><p class="modal-eyebrow">SECTOR ${pad(s.stage)} CLEARED / ${count(s.upgrades)+1} OF 9</p><h2>무엇을 감당할 것인가.</h2><p class="modal-copy">강화와 부담을 함께 선택하세요. 이전 선택은 모두 남습니다.</p></div><div class="reward-next">NEXT ${pad(s.stage+1)} / ${next.name}<br>${s.stage===9?'최종 보스 · 3페이즈':'다음 전투는 빈 보드에서 시작합니다'}</div></div><div class="reward-grid">${cards}</div><div class="loadout-summary">${tags(s)||'<span class="note">첫 번째 누적 선택입니다.</span>'}</div><p class="note">① ② ③ 키로 선택 가능 · 스테이지마다 보드·홀드 초기화 · 시작 시드 ${esc(game.seed)}</p>`,'reward');
+  modal(`<div class="reward-top"><div><p class="modal-eyebrow">SECTOR ${pad(s.stage)} CLEARED / ${count(s.upgrades)+1} OF 9</p><h2>무엇을 감당할 것인가.</h2><p class="modal-copy">강화와 부담을 함께 선택하세요. 이전 선택은 모두 남습니다.</p></div><div class="reward-next">NEXT ${pad(s.stage+1)} / ${next.name}<br>${s.stage===9?'최종 보스 · 3페이즈':'다음 전투는 빈 보드에서 시작합니다'}</div></div>${glossary()}<div class="reward-grid">${cards}</div><div class="loadout-summary">${tags(s)||'<span class="note">첫 번째 누적 선택입니다.</span>'}</div><p class="note">① ② ③ 키로 선택 가능 · 스테이지마다 보드·홀드 초기화 · 시작 시드 ${esc(game.seed)}</p>`,'reward');
 }
 function saveRecord(){
   if(saved)return;saved=true;const s=game.state;
@@ -86,12 +102,12 @@ function showResult(){
 }
 function showBuild(){
   if(!game)return;paused=true;
-  const s=game.state,items=(defs,counts,bad)=>Object.entries(counts).filter(([,r])=>r).map(([k,r])=>`<div class="build-item${bad?' bad':''}"><strong>${defs[k].label} · ${r}</strong><p>${defs[k].description(r)}</p></div>`).join('');
-  modal(`<p class="modal-eyebrow">CURRENT BUILD / ${count(s.upgrades)} OF 9</p><h2>누적된 선택</h2><p class="modal-copy">전투는 일시정지되어 있습니다. 새 선택이 이전 효과를 지우지 않습니다.</p><div class="build-list">${items(UPGRADES,s.upgrades,false)}${items(BURDENS,s.burdens,true)||'<p class="note">아직 부담이 없습니다.</p>'}</div><div class="modal-actions"><button class="primary" data-ui="resume">전투로 돌아가기</button></div>`,'build');
+  const s=game.state,items=(defs,counts,bad)=>Object.entries(counts).filter(([,r])=>r).map(([k,r])=>`<div class="build-item${bad?' bad':''}"><strong>${defs[k].label} · ${r}</strong><p>${defs[k].description(r)}</p>${example(defs[k],r)}</div>`).join('');
+  modal(`<p class="modal-eyebrow">CURRENT BUILD / ${count(s.upgrades)} OF 9</p><h2>누적된 선택</h2><p class="modal-copy">전투는 일시정지되어 있습니다. 새 선택이 이전 효과를 지우지 않습니다.</p>${glossary()}<div class="build-list">${items(UPGRADES,s.upgrades,false)}${items(BURDENS,s.burdens,true)||'<p class="note">아직 부담이 없습니다.</p>'}</div><div class="modal-actions"><button class="primary" data-ui="resume">전투로 돌아가기</button></div>`,'build');
 }
 function showHelp(){
   const during=!!game&&game.state.status==='playing';if(during)paused=true;
-  modal(`<p class="modal-eyebrow">FIELD MANUAL</p><h2>줄을 지워 공격한다.</h2><p class="modal-copy">10구역을 돌파하세요. 상단이 막히면 런이 끝납니다.<br>1~9구역 승리 뒤 강화와 지속 부담을 함께 고릅니다.<br>다음 구역은 빈 보드와 빈 홀드에서 시작합니다.<br>보스의 공격 카운트는 블록을 고정할 때마다 줄어듭니다.</p><div class="help-list"><span>좌우 이동 <b>← / →</b></span><span>빠른 낙하 <b>↓</b></span><span>시계 회전 <b>X / ↑</b></span><span>반시계 회전 <b>Z</b></span><span>즉시 낙하 <b>SPACE</b></span><span>홀드 <b>C / SHIFT</b></span><span>일시정지 <b>P / ESC</b></span><span>보상 선택 <b>1 / 2 / 3</b></span></div><p class="modal-copy">1·2·3·4줄 기본 피해: 10 / 24 / 42 / 64<br>연속 고정에서 줄을 지우면 연쇄가 쌓입니다.<br>대응 창: 마지막 3고정에 총 2줄을 지우면 예정 공격 1행 감소.<br>노출 창: 방어 ×0.65 → 노출 ×1.35. 공격할 순간을 고르세요.<br>전투가 길어지면 방해 공격이 강해집니다.</p><div class="modal-actions"><button class="primary" data-ui="${during?'resume':'close'}">${during?'전투로 돌아가기':'알겠어요'}</button></div>`,'help',true);
+  modal(`<p class="modal-eyebrow">FIELD MANUAL</p><h2>줄을 지워 공격한다.</h2><p class="modal-copy">10구역을 돌파하세요. 상단이 막히면 런이 끝납니다.<br>1~9구역 승리 뒤 강화와 지속 부담을 함께 고릅니다.<br>다음 구역은 빈 보드와 빈 홀드에서 시작합니다.<br>보스의 공격 카운트는 블록을 고정할 때마다 줄어듭니다.</p>${glossary()}<div class="help-list"><span>좌우 이동 <b>← / →</b></span><span>빠른 낙하 <b>↓</b></span><span>시계 회전 <b>X / ↑</b></span><span>반시계 회전 <b>Z</b></span><span>즉시 낙하 <b>SPACE</b></span><span>홀드 <b>C / SHIFT</b></span><span>일시정지 <b>P / ESC</b></span><span>보상 선택 <b>1 / 2 / 3</b></span></div><p class="modal-copy">1·2·3·4줄 기본 피해: 10 / 24 / 42 / 64<br>연속 고정에서 줄을 지우면 연쇄가 쌓입니다.<br>대응 창: 마지막 3고정에 총 2줄을 지우면 예정 공격 1행 감소.<br>노출 창: 방어 ×0.65 → 노출 ×1.35. 공격할 순간을 고르세요.<br>전투가 길어지면 방해 공격이 강해집니다.</p><div class="modal-actions"><button class="primary" data-ui="${during?'resume':'close'}">${during?'전투로 돌아가기':'알겠어요'}</button></div>`,'help',true);
 }
 function showRecords(){
   if(game&&game.state.status==='playing')paused=true;
@@ -138,9 +154,19 @@ function draw(state){
     ctx.strokeStyle='#26374640';ctx.strokeRect(x+col*cell+.5,y+row*cell+.5,cell,cell);
     if(s.board[row][col])block(x+col*cell,y+row*cell,cell,s.board[row][col]);
   }
-  if(s.active&&s.status==='playing'){
-    const gy=game.ghostY();for(const [a,c]of cells({...s.active,y:gy}))if(c>=0)block(x+a*cell,y+c*cell,cell,s.active.type,.65,true);
-    for(const [a,c]of cells(s.active))if(c>=0)block(x+a*cell,y+c*cell,cell,s.active.type);
+  if(s.active&&(s.status==='playing'||s.status==='dead')){
+    if(s.status==='playing'){
+      const gy=game.ghostY();for(const [a,c]of cells({...s.active,y:gy}))if(c>=0)block(x+a*cell,y+c*cell,cell,s.active.type,.65,true);
+    }
+    for(const [a,c]of cells(s.active))if(c>=0)block(x+a*cell,y+c*cell,cell,s.active.type,s.status==='dead'?.35:1);
+  }
+  if(s.status==='dead'){
+    ctx.strokeStyle='#ef8777';ctx.lineWidth=3;ctx.strokeRect(x-1,y-1,cell*10+2,5);
+    for(const [col,row]of s.death?.cells||[]){
+      ctx.fillStyle='#ef877744';ctx.strokeStyle='#f7a495';ctx.lineWidth=2;
+      if(row<0){ctx.fillRect(x+col*cell+4,y-9,cell-8,6);}
+      else if(row<20){ctx.fillRect(x+col*cell+2,y+row*cell+2,cell-4,cell-4);ctx.strokeRect(x+col*cell+2,y+row*cell+2,cell-4,cell-4);}
+    }
   }
   ctx.strokeStyle=s.board.slice(0,5).some(r=>r.some(Boolean))?'#b07458':'#4a636b';ctx.lineWidth=1;ctx.strokeRect(x-.5,y-.5,cell*10+1,cell*20+1);
   line(x,y-4,x+32,y-4,'#65ddd0');line(x+cell*10-32,y-4,x+cell*10,y-4,'#65ddd0');
@@ -169,6 +195,16 @@ function draw(state){
   if(s.upgrades.repair)text(`수복 ${s.repairLeft}회 · ${s.repairCooldown?`${s.repairCooldown}고정 대기`:'준비됨'}`,895,595,10,'#73968f','right');
   text('BUILD',550,636,9,'#4f6c7c','left',true);text(`${count(s.upgrades)} 강화  /  ${count(s.burdens)} 부담`,550,656,12,'#9eafb6');
   if(s.status==='reward'||s.status==='won')text('구조체 붕괴',895,656,11,'#65ddd0','right');
+  if(s.upgrades.high||s.upgrades.low){
+    const top=s.board.findIndex(row=>row.some(Boolean));const height=top<0?0:s.board.length-top;
+    const planned=s.active&&s.status==='playing'?Math.max(height,...cells({...s.active,y:game.ghostY()}).map(([,row])=>s.board.length-row)):height;
+    for(const [limit,label,enabled]of [[12,'고도',s.upgrades.high],[6,'저상',s.upgrades.low]])if(enabled){
+      const yy=y+(s.board.length-limit)*cell,color=label==='고도'?'#efae63':'#65ddd0';
+      line(x+cell*10+3,yy,x+cell*10+12,yy,color);text(`${label} ${limit}`,x+cell*10+18,yy+4,10,color);
+    }
+    text(`현재 높이 ${height}`,x+cell*10+18,531,10,'#94a9b3');
+    text(`배치 후 ${planned}`,x+cell*10+18,549,10,'#c6d8d4');
+  }
 }
 function resize(){const dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);}
 window.addEventListener('resize',resize);resize();
@@ -190,7 +226,7 @@ function frame(ms){
   }
   if(game){
     const s=game.state;
-    if(s.status==='dead'&&modalKind!=='result'&&previousStatus!=='dead'){previousStatus='dead';clearInput();showResult();}
+    if(s.status==='dead'&&previousStatus!=='dead')beginDeathReview();
     if((s.status==='reward'||s.status==='won')&&!modalKind&&fx.readyAt!==null&&fx.time>=fx.readyAt){previousStatus=s.status;clearInput();s.status==='reward'?showReward():showResult();}
   }
   draw(game?.state);uiTimer+=dt;if(uiTimer>.12){updateUi();uiTimer=0;}
@@ -198,6 +234,11 @@ function frame(ms){
   requestAnimationFrame(frame);
 }
 document.addEventListener('keydown',e=>{
+  physicalKeys.add(e.code);
+  if(review.active){
+    if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.code!=='Tab')e.preventDefault();
+    if(review.keyDown(e.code,e))finishDeathReview();return;
+  }
   if(e.target instanceof HTMLInputElement){if(e.code==='Enter'){e.preventDefault();startRun();}return;}
   if(modalKind==='reward'&&['Digit1','Digit2','Digit3'].includes(e.code)){e.preventDefault();choose(Number(e.code.slice(-1))-1);return;}
   if(e.code==='Escape'||e.code==='KeyP'){
@@ -213,12 +254,18 @@ document.addEventListener('keydown',e=>{
   const a=map[e.code];if(a==='left'||a==='right'){direction=a==='left'?-1:1;dirAge=0;dirRepeats=0;}
   if(a)act(a);
 });
-document.addEventListener('keyup',e=>{pressed.delete(e.code);if(['ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)){direction=pressed.has('ArrowLeft')||pressed.has('KeyA')?-1:pressed.has('ArrowRight')||pressed.has('KeyD')?1:0;dirAge=0;dirRepeats=0;}});
-window.addEventListener('blur',()=>{clearInput();if(game?.state.status==='playing'&&!paused&&!modalKind)pause();audio.stop();});
+document.addEventListener('keyup',e=>{physicalKeys.delete(e.code);review.releaseKey(e.code);pressed.delete(e.code);if(['ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)){direction=pressed.has('ArrowLeft')||pressed.has('KeyA')?-1:pressed.has('ArrowRight')||pressed.has('KeyD')?1:0;dirAge=0;dirRepeats=0;}});
+document.addEventListener('pointerdown',e=>{
+  physicalPointers.add(e.pointerId);
+  if(review.active&&review.pointerDown(e.pointerId)){e.preventDefault();e.stopImmediatePropagation();finishDeathReview();}
+},true);
+for(const type of ['pointerup','pointercancel'])document.addEventListener(type,e=>{physicalPointers.delete(e.pointerId);review.releasePointer(e.pointerId);},true);
+window.addEventListener('blur',()=>{clearInput();physicalKeys.clear();physicalPointers.clear();review.keys.clear();review.pointers.clear();if(game?.state.status==='playing'&&!paused&&!modalKind)pause();audio.stop();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.state.status==='playing'&&!paused&&!modalKind)pause();audio.stop();}lastTime=undefined;});
 $('startBtn').onclick=()=>startRun();$('helpBtn').onclick=showHelp;$('recordsBtn').onclick=showRecords;
+$('deathContinue').onclick=()=>{if(review.active&&!review.keys.size&&!review.pointers.size)finishDeathReview();};
 $('buildBtn').onclick=()=>{if(game?.state.status==='playing')showBuild();else toast('전투 중 현재 빌드를 확인할 수 있습니다.');};
-$('pauseBtn').onclick=()=>{if(paused)resume();else pause();};
+$('pauseBtn').onclick=()=>{if(game?.state.status!=='playing')return;if(paused)resume();else pause();};
 $('soundBtn').onclick=()=>{sound=!sound;audio.setEnabled(sound);writeStore('faultline.sound',sound);updateUi();};
 $('motionBtn').onclick=()=>{reduced=!reduced;writeStore('faultline.motion',reduced);updateUi();};
 $('modal').addEventListener('click',e=>{

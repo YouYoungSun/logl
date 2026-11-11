@@ -29,7 +29,7 @@
         <div class="intro">
           <div class="eyebrow"><span></span> BLOCK COMBAT / ROGUELIKE</div>
           <h1>FAULT<span>LINE</span></h1>
-          <p class="intro-ko">단층</p>
+          <p class="intro-ko">단층 <span class="intro-version">Version v0.1.2</span></p>
           <p class="intro-copy">지운 줄이 공격이 된다.<br>아홉 번의 선택을 쌓아, 열 번째 구역을 돌파하라.</p>
           <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>01</b> 생존 기회</span></div>
           <div class="start-actions"><button id="startBtn" class="primary" type="button">런 시작 <span>↗</span></button><button id="helpBtn" class="secondary" type="button">조작과 규칙</button></div>
@@ -37,6 +37,14 @@
           <button id="recordsBtn" class="text-button" type="button">이 기기의 기록 보기 <span>→</span></button>
         </div>
         <div class="intro-boss-label"><span>UNKNOWN STRUCTURE</span><b>침묵은 오래가지 않는다.</b></div>
+      </section>
+      <section id="deathNotice" class="death-notice" hidden aria-labelledby="deathTitle">
+        <p class="modal-eyebrow">RUN ENDED</p>
+        <h2 id="deathTitle">사망 장면 확인</h2>
+        <p id="deathReason"></p>
+        <p id="deathHint" class="death-hint"></p>
+        <button id="deathContinue" class="primary" type="button">결과 보기 →</button>
+        <small>보드를 확인한 뒤 클릭하거나 키를 새로 누르세요.</small>
       </section>
       <div id="modal" class="modal" hidden>
         <section id="modalContent" class="modal-content" aria-modal="true" role="dialog" aria-label="게임 메뉴"></section>

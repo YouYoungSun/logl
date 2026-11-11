@@ -233,3 +233,15 @@ test('effects consumption cannot affect deterministic game state or event conten
   }
   assert.deepEqual(a.state,b.state);assert.deepEqual(all,b.drainEvents());
 });
+
+test('death context retains the failed spawn, above-ceiling blocks and cells pushed off the top',()=>{
+  const spawn=new Game('death-spawn');spawn.state.board[0][4]='G';spawn._spawn('O');
+  assert.equal(spawn.state.status,'dead');assert.equal(spawn.state.death.kind,'spawn');
+  assert.ok(spawn.state.death.cells.some(([x,y])=>x===4&&y===0));
+  const pushed=new Game('death-push');pushed.state.board[0][2]='T';pushed._insertRows([4]);
+  assert.equal(pushed.state.death.kind,'garbage');assert.deepEqual(pushed.state.death.cells,[[2,0]]);
+  assert.equal(pushed.state.board[19][4],null);assert.equal(pushed.state.board[19][0],'G');
+  const locked=new Game('death-lock');locked.state.active={type:'I',rotation:1,x:2,y:-2};
+  locked.state.board[1].fill('G');locked.state.board[1][4]=null;locked._lock();
+  assert.equal(locked.state.death.kind,'lockout');assert.ok(locked.state.death.cells.every(([,y])=>y<0));
+});
