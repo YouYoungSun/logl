@@ -174,7 +174,7 @@ test('nine reward decisions accumulate both ranks; stage ten has no reward and d
     assert.equal(new Set(g.state.offers.map(o=>o.upgrade)).size,3);
     assert.equal(new Set(g.state.offers.map(o=>o.burden)).size,3);
     if(stage>=7&&g.state.upgrades.opening===0)assert.ok(g.state.offers.every(o=>o.upgrade!=='opening'));
-    assert.equal(g.choose(0),true);assert.equal(g.state.held,'T');
+    assert.equal(g.choose(0),true);assert.equal(g.state.held,null);
   }
   assert.equal(g.state.stage,10);assert.equal(g.state.history.length,9);
   assert.equal(Object.values(g.state.upgrades).reduce((a,b)=>a+b,0),9);
@@ -184,6 +184,28 @@ test('nine reward decisions accumulate both ranks; stage ten has no reward and d
   assert.equal(g.state.status,'won');assert.deepEqual(g.state.offers,[]);assert.equal(g.choose(0),false);
   const dead=new Game('dead');dead._die('test');const before=JSON.stringify(dead.state);
   assert.equal(dead.act('drop'),false);dead.step(10);assert.equal(JSON.stringify(dead.state),before);
+});
+
+test('next sector starts with an empty board, fresh hold and independent seven-bag while preserving the run build',()=>{
+  const g=new Game('fresh-sector'),s=g.state;
+  s.board[19][0]='G';s.tags[19]=777;s.held='I';s.combo=5;s.charge=4;
+  s.stats.locks=28;s.stats.lines=9;s.stats.seconds=60;s.stats.damage=150;
+  s.upgrades.repair=1;s.burdens.erosion=1;
+  g._victory();const offered=s.offers[0];g.choose(0);
+  assert.equal(s.stage,2);assert.equal(s.status,'playing');
+  assert.ok(s.board.every(row=>row.every(c=>c===null)));
+  assert.ok(s.tags.every(t=>t===null));assert.equal(s.held,null);assert.equal(s.canHold,true);
+  assert.equal(s.combo,0);assert.equal(s.charge,0);assert.equal(s.repairLeft,s.upgrades.repair);
+  assert.equal(s.boss.stageLocks,0);assert.equal(s.boss.attackIndex,0);
+  assert.equal(s.boss.erosionRemaining,s.burdens.erosion);
+  assert.equal(s.stats.locks,28);assert.equal(s.stats.lines,9);assert.equal(s.stats.seconds,60);assert.equal(s.stats.damage,150);
+  assert.equal(s.upgrades[offered.upgrade],offered.upgrade==='repair'?2:1);
+  assert.equal(s.burdens[offered.burden],offered.burden==='erosion'?2:1);
+  assert.equal(s.history.length,1);
+  assert.equal(new Set([s.active.type,...s.queue.slice(0,6)]).size,7);
+  const other=new Game('fresh-sector');for(let i=0;i<31;i++)other._take();
+  other.state.stage=2;other._beginStage();
+  assert.deepEqual([s.active.type,...s.queue],[other.state.active.type,...other.state.queue]);
 });
 
 test('kill skips pending erosion/attack and event sequence is monotonic',()=>{

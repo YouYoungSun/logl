@@ -1,7 +1,7 @@
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 export const WIDTH = 10;
 export const HEIGHT = 20;
-export const RULES_VERSION = '0.1.0';
+export const RULES_VERSION = '0.1.1';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);
@@ -19,7 +19,7 @@ export const UPGRADES = {
   high: { label: '고도', max: 3, description: r => `제거 직전 최고 높이 12 이상이면 피해 +${35*r}%` },
   low: { label: '저상', max: 3, description: r => `제거 직전 최고 높이 6 이하면 피해 +${15*r}%` },
   opening: { label: '개시', max: 3, description: r => `각 전투의 첫 두 제거에 고정 피해 +${6*r}` },
-  repair: { label: '수복', max: 3, description: r => `즉시 방해 1행 정리. 전투당 ${r}회, 2~3줄 제거 시 추가 1행 정리 (6고정 간격)` }
+  repair: { label: '수복', max: 3, description: r => `전투당 ${r}회, 2~3줄 제거 시 방해 1행 추가 정리 (6고정 간격)` }
 };
 
 export const BURDENS = {
@@ -126,7 +126,7 @@ export class Game {
       stats:{locks:0,lines:0,damage:0,seconds:0,cleared:0,maxCombo:0},
       combo:0,charge:0,repairLeft:0,reason:'',tick:0,history:[]
     };
-    this._fillQueue(); this._beginStage();
+    this._beginStage();
   }
   get tick() { return this.state.tick; }
   _emit(type, data={}) {
@@ -160,6 +160,11 @@ export class Game {
   }
   _beginStage() {
     const s=this.state, cfg=STAGES[s.stage-1];
+    // Each sector is a fresh battle. Only the run's build and record persist.
+    s.board=Array.from({length:HEIGHT},emptyRow);s.tags=Array(HEIGHT).fill(null);
+    s.active=null;s.held=null;s.queue=[];
+    this._pieces=rng(this.seed+':pieces:'+s.stage);
+    this._fillQueue();
     const hp=round(cfg.hp*(1+0.08*s.burdens.vitality));
     s.boss={hp,maxHp:hp,phase:1,pendingPhase:1,K:0,remaining:0,stageLocks:0,
       attackIndex:0,holes:[],exposed:false,armor:false,windowActive:false,
@@ -381,7 +386,6 @@ export class Game {
     if(s.upgrades[offer.upgrade]>=UPGRADES[offer.upgrade].max||s.burdens[offer.burden]>=3)return false;
     s.upgrades[offer.upgrade]++;s.burdens[offer.burden]++;
     s.history.push({stage:s.stage,...offer});
-    if(offer.upgrade==='repair')this._deleteRepair(s.board,s.tags);
     s.stage++;s.status='playing';this._beginStage();
     return true;
   }

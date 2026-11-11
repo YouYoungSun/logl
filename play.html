@@ -65,7 +65,7 @@ const Core=(()=>{
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 const WIDTH = 10;
 const HEIGHT = 20;
-const RULES_VERSION = '0.1.0';
+const RULES_VERSION = '0.1.1';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);
@@ -83,7 +83,7 @@ const UPGRADES = {
   high: { label: '고도', max: 3, description: r => `제거 직전 최고 높이 12 이상이면 피해 +${35*r}%` },
   low: { label: '저상', max: 3, description: r => `제거 직전 최고 높이 6 이하면 피해 +${15*r}%` },
   opening: { label: '개시', max: 3, description: r => `각 전투의 첫 두 제거에 고정 피해 +${6*r}` },
-  repair: { label: '수복', max: 3, description: r => `즉시 방해 1행 정리. 전투당 ${r}회, 2~3줄 제거 시 추가 1행 정리 (6고정 간격)` }
+  repair: { label: '수복', max: 3, description: r => `전투당 ${r}회, 2~3줄 제거 시 방해 1행 추가 정리 (6고정 간격)` }
 };
 
 const BURDENS = {
@@ -190,7 +190,7 @@ class Game {
       stats:{locks:0,lines:0,damage:0,seconds:0,cleared:0,maxCombo:0},
       combo:0,charge:0,repairLeft:0,reason:'',tick:0,history:[]
     };
-    this._fillQueue(); this._beginStage();
+    this._beginStage();
   }
   get tick() { return this.state.tick; }
   _emit(type, data={}) {
@@ -224,6 +224,11 @@ class Game {
   }
   _beginStage() {
     const s=this.state, cfg=STAGES[s.stage-1];
+    // Each sector is a fresh battle. Only the run's build and record persist.
+    s.board=Array.from({length:HEIGHT},emptyRow);s.tags=Array(HEIGHT).fill(null);
+    s.active=null;s.held=null;s.queue=[];
+    this._pieces=rng(this.seed+':pieces:'+s.stage);
+    this._fillQueue();
     const hp=round(cfg.hp*(1+0.08*s.burdens.vitality));
     s.boss={hp,maxHp:hp,phase:1,pendingPhase:1,K:0,remaining:0,stageLocks:0,
       attackIndex:0,holes:[],exposed:false,armor:false,windowActive:false,
@@ -445,7 +450,6 @@ class Game {
     if(s.upgrades[offer.upgrade]>=UPGRADES[offer.upgrade].max||s.burdens[offer.burden]>=3)return false;
     s.upgrades[offer.upgrade]++;s.burdens[offer.burden]++;
     s.history.push({stage:s.stage,...offer});
-    if(offer.upgrade==='repair')this._deleteRepair(s.board,s.tags);
     s.stage++;s.status='playing';this._beginStage();
     return true;
   }
@@ -967,7 +971,7 @@ function showReward(){
     const b={...s.burdens,[o.burden]:br},hp=Math.floor(next.hp*(1+.08*b.vitality)+.5),K=Math.max(4,next.K-b.haste);
     return `<button class="reward-card" data-choice="${i}"><div class="card-index">CHOICE 0${i+1}<span class="card-level">LV ${s.upgrades[o.upgrade]} → ${ur}</span></div><h3>${UPGRADES[o.upgrade].label}</h3><p class="card-description">${UPGRADES[o.upgrade].description(ur)}</p><div class="burden-block"><b>＋ ${BURDENS[o.burden].label} ${s.burdens[o.burden]} → ${br}</b><p>${BURDENS[o.burden].description(br)}</p></div><div class="card-preview">다음 보스 HP ${hp.toLocaleString()} / ${K}고정 주기<br>초기 침식 ${b.erosion}행 · 피해 ×${(1-.04*b.dampen).toFixed(2)}</div><div class="pick-label">이 선택을 누적하기 <span>↗</span></div></button>`;
   }).join('');
-  modal(`<div class="reward-top"><div><p class="modal-eyebrow">SECTOR ${pad(s.stage)} CLEARED / ${count(s.upgrades)+1} OF 9</p><h2>무엇을 감당할 것인가.</h2><p class="modal-copy">강화와 부담을 함께 선택하세요. 이전 선택은 모두 남습니다.</p></div><div class="reward-next">NEXT ${pad(s.stage+1)} / ${next.name}<br>${s.stage===9?'최종 보스 · 3페이즈':'다음 전투에도 보드는 이어집니다'}</div></div><div class="reward-grid">${cards}</div><div class="loadout-summary">${tags(s)||'<span class="note">첫 번째 누적 선택입니다.</span>'}</div><p class="note">① ② ③ 키로 선택 가능 · 재선택과 무상 회복 없음 · 시작 시드 ${esc(game.seed)}</p>`,'reward');
+  modal(`<div class="reward-top"><div><p class="modal-eyebrow">SECTOR ${pad(s.stage)} CLEARED / ${count(s.upgrades)+1} OF 9</p><h2>무엇을 감당할 것인가.</h2><p class="modal-copy">강화와 부담을 함께 선택하세요. 이전 선택은 모두 남습니다.</p></div><div class="reward-next">NEXT ${pad(s.stage+1)} / ${next.name}<br>${s.stage===9?'최종 보스 · 3페이즈':'다음 전투는 빈 보드에서 시작합니다'}</div></div><div class="reward-grid">${cards}</div><div class="loadout-summary">${tags(s)||'<span class="note">첫 번째 누적 선택입니다.</span>'}</div><p class="note">① ② ③ 키로 선택 가능 · 스테이지마다 보드·홀드 초기화 · 시작 시드 ${esc(game.seed)}</p>`,'reward');
 }
 function saveRecord(){
   if(saved)return;saved=true;const s=game.state;
@@ -987,7 +991,7 @@ function showBuild(){
 }
 function showHelp(){
   const during=!!game&&game.state.status==='playing';if(during)paused=true;
-  modal(`<p class="modal-eyebrow">FIELD MANUAL</p><h2>줄을 지워 공격한다.</h2><p class="modal-copy">10구역을 돌파하세요. 상단이 막히면 런이 끝납니다.<br>1~9구역 승리 뒤 강화와 지속 부담을 함께 고릅니다.<br>보스의 공격 카운트는 블록을 고정할 때마다 줄어듭니다.</p><div class="help-list"><span>좌우 이동 <b>← / →</b></span><span>빠른 낙하 <b>↓</b></span><span>시계 회전 <b>X / ↑</b></span><span>반시계 회전 <b>Z</b></span><span>즉시 낙하 <b>SPACE</b></span><span>홀드 <b>C / SHIFT</b></span><span>일시정지 <b>P / ESC</b></span><span>보상 선택 <b>1 / 2 / 3</b></span></div><p class="modal-copy">1·2·3·4줄 기본 피해: 10 / 24 / 42 / 64<br>연속 고정에서 줄을 지우면 연쇄가 쌓입니다.<br>대응 창: 마지막 3고정에 총 2줄을 지우면 예정 공격 1행 감소.<br>노출 창: 방어 ×0.65 → 노출 ×1.35. 공격할 순간을 고르세요.<br>전투가 길어지면 방해 공격이 강해집니다.</p><div class="modal-actions"><button class="primary" data-ui="${during?'resume':'close'}">${during?'전투로 돌아가기':'알겠어요'}</button></div>`,'help',true);
+  modal(`<p class="modal-eyebrow">FIELD MANUAL</p><h2>줄을 지워 공격한다.</h2><p class="modal-copy">10구역을 돌파하세요. 상단이 막히면 런이 끝납니다.<br>1~9구역 승리 뒤 강화와 지속 부담을 함께 고릅니다.<br>다음 구역은 빈 보드와 빈 홀드에서 시작합니다.<br>보스의 공격 카운트는 블록을 고정할 때마다 줄어듭니다.</p><div class="help-list"><span>좌우 이동 <b>← / →</b></span><span>빠른 낙하 <b>↓</b></span><span>시계 회전 <b>X / ↑</b></span><span>반시계 회전 <b>Z</b></span><span>즉시 낙하 <b>SPACE</b></span><span>홀드 <b>C / SHIFT</b></span><span>일시정지 <b>P / ESC</b></span><span>보상 선택 <b>1 / 2 / 3</b></span></div><p class="modal-copy">1·2·3·4줄 기본 피해: 10 / 24 / 42 / 64<br>연속 고정에서 줄을 지우면 연쇄가 쌓입니다.<br>대응 창: 마지막 3고정에 총 2줄을 지우면 예정 공격 1행 감소.<br>노출 창: 방어 ×0.65 → 노출 ×1.35. 공격할 순간을 고르세요.<br>전투가 길어지면 방해 공격이 강해집니다.</p><div class="modal-actions"><button class="primary" data-ui="${during?'resume':'close'}">${during?'전투로 돌아가기':'알겠어요'}</button></div>`,'help',true);
 }
 function showRecords(){
   if(game&&game.state.status==='playing')paused=true;
