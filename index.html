@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a1018">
+  <meta name="description" content="줄을 지워 보스를 공격하고, 아홉 번의 선택으로 열 번째 구역을 돌파하세요.">
+  <title>FAULTLINE — 단층</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%2365ddd0' d='M8 8h32v16H24v16H8zm32 16h16v32H24V40h16z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="FAULTLINE 처음 화면"><span class="brand-mark">⌁</span><span>FAULTLINE<small>단층</small></span></a>
+      <div class="run-status"><span class="status-dot"></span><span id="runStatus">RUN / 대기 중</span></div>
+      <nav class="tools" aria-label="설정">
+        <button id="buildBtn" type="button" title="현재 빌드">빌드 <span id="buildCount">00</span></button>
+        <button id="soundBtn" type="button" aria-pressed="true">소리 ON</button>
+        <button id="motionBtn" type="button" aria-pressed="false">효과 기본</button>
+        <button id="pauseBtn" type="button" title="P / Esc">Ⅱ <span>일시정지</span></button>
+      </nav>
+    </header>
+
+    <section class="surface" aria-label="게임 영역">
+      <canvas id="gameCanvas" width="1100" height="680" tabindex="0" aria-label="블록 전투 게임 보드. 방향키로 이동, Z와 X로 회전, 스페이스로 즉시 낙하합니다."></canvas>
+      <div id="liveStatus" class="sr-only" aria-live="polite"></div>
+      <section id="startScreen" class="start-screen">
+        <div class="intro">
+          <div class="eyebrow"><span></span> BLOCK COMBAT / ROGUELIKE</div>
+          <h1>FAULT<span>LINE</span></h1>
+          <p class="intro-ko">단층</p>
+          <p class="intro-copy">지운 줄이 공격이 된다.<br>아홉 번의 선택을 쌓아, 열 번째 구역을 돌파하라.</p>
+          <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>01</b> 생존 기회</span></div>
+          <div class="start-actions"><button id="startBtn" class="primary" type="button">런 시작 <span>↗</span></button><button id="helpBtn" class="secondary" type="button">조작과 규칙</button></div>
+          <label class="seed-label" for="seedInput">RUN SEED <input id="seedInput" maxlength="32" placeholder="비우면 무작위" autocomplete="off" spellcheck="false"></label>
+          <button id="recordsBtn" class="text-button" type="button">이 기기의 기록 보기 <span>→</span></button>
+        </div>
+        <div class="intro-boss-label"><span>UNKNOWN STRUCTURE</span><b>침묵은 오래가지 않는다.</b></div>
+      </section>
+      <div id="modal" class="modal" hidden>
+        <section id="modalContent" class="modal-content" aria-modal="true" role="dialog" aria-label="게임 메뉴"></section>
+      </div>
+      <div id="toast" class="toast" aria-live="polite"></div>
+    </section>
+
+    <footer class="game-footer">
+      <div class="controls"><span><kbd>←</kbd><kbd>→</kbd> 이동</span><span><kbd>Z</kbd><kbd>X</kbd> 회전</span><span><kbd>SPACE</kbd> 즉시 낙하</span><span><kbd>C</kbd> 홀드</span><span><kbd>↓</kbd> 빠른 낙하</span></div>
+      <span id="footerHint">정규 런 · 사망 시 전부 초기화</span>
+    </footer>
+    <div class="touch-controls" aria-label="터치 조작">
+      <button data-act="left" aria-label="왼쪽">←</button><button data-act="ccw" aria-label="반시계 회전">↶</button><button data-act="cw" aria-label="시계 회전">↷</button><button data-act="right" aria-label="오른쪽">→</button><button data-act="hold">HOLD</button><button data-act="drop">DROP</button>
+    </div>
+  </main>
+  <script type="module" src="./src/main.mjs"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "faultline-loglike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A ten-sector falling-block roguelike",
+  "scripts": {
+    "dev": "node scripts/serve.mjs --open",
+    "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}
