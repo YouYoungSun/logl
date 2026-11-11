@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a1018">
   <meta name="description" content="줄을 지워 보스를 공격하고, 아홉 번의 선택으로 열 번째 구역을 돌파하세요.">
-  <title>FAULTLINE — 단층</title>
+  <title>FAULTLINE ver2 — 단층</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%2365ddd0' d='M8 8h32v16H24v16H8zm32 16h16v32H24V40h16z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
 </head>
@@ -26,13 +26,15 @@
       <canvas id="gameCanvas" width="1100" height="680" tabindex="0" aria-label="블록 전투 게임 보드. 방향키로 이동, Z와 X로 회전, 스페이스로 즉시 낙하합니다."></canvas>
       <div id="liveStatus" class="sr-only" aria-live="polite"></div>
       <section id="startScreen" class="start-screen">
+        <img class="intro-art" src="./assets/faultline-ver2.png" alt="균열과 청록빛 코어를 드러낸 최종 구조체" width="1536" height="1024">
         <div class="intro">
           <div class="eyebrow"><span></span> BLOCK COMBAT / ROGUELIKE</div>
           <h1>FAULT<span>LINE</span></h1>
-          <p class="intro-ko">단층 <span class="intro-version">Version v0.1.2</span></p>
+          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.0</span></p>
           <p class="intro-copy">지운 줄이 공격이 된다.<br>아홉 번의 선택을 쌓아, 열 번째 구역을 돌파하라.</p>
-          <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>01</b> 생존 기회</span></div>
+          <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>03</b> 최종 페이즈</span></div>
           <div class="start-actions"><button id="startBtn" class="primary" type="button">런 시작 <span>↗</span></button><button id="helpBtn" class="secondary" type="button">조작과 규칙</button></div>
+          <button id="guideBtn" class="guide-entry" type="button"><span>버프 · 디버프 도감</span><small>효과와 예시를 읽고 시작하기 →</small></button>
           <label class="seed-label" for="seedInput">RUN SEED <input id="seedInput" maxlength="32" placeholder="비우면 무작위" autocomplete="off" spellcheck="false"></label>
           <button id="recordsBtn" class="text-button" type="button">이 기기의 기록 보기 <span>→</span></button>
         </div>
@@ -54,7 +56,7 @@
 
     <footer class="game-footer">
       <div class="controls"><span><kbd>←</kbd><kbd>→</kbd> 이동</span><span><kbd>Z</kbd><kbd>X</kbd> 회전</span><span><kbd>SPACE</kbd> 즉시 낙하</span><span><kbd>C</kbd> 홀드</span><span><kbd>↓</kbd> 빠른 낙하</span></div>
-      <span id="footerHint">정규 런 · 사망 시 전부 초기화</span>
+      <span id="footerHint">사망 후 1구역부터 또는 한 구역 전부터 재도전</span>
     </footer>
     <div class="touch-controls" aria-label="터치 조작">
       <button data-act="left" aria-label="왼쪽">←</button><button data-act="ccw" aria-label="반시계 회전">↶</button><button data-act="cw" aria-label="시계 회전">↷</button><button data-act="right" aria-label="오른쪽">→</button><button data-act="hold">HOLD</button><button data-act="drop">DROP</button>

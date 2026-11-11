@@ -134,7 +134,7 @@ test('armor uses the same pre-lock count as response, and damage rounds only onc
   g.state.burdens.dampen=1;g.state.boss.remaining=3;
   clearFixture(g);g.act('drop');
   const e=g.drainEvents().find(e=>e.type==='clear');
-  assert.equal(e.damage,Math.floor((10*1.4+6)*1.35*.96+.5));
+  assert.equal(e.damage,Math.floor((10*1.4+6+STAGES[8].hp*.01)*1.35*.96+.5));
   assert.equal(g.state.boss.responseLines,1);
 });
 
@@ -157,7 +157,7 @@ test('final phases are reserved immediately but activate only after the announce
   assert.equal(g.state.boss.remaining,7);assert.equal(g.state.repairLeft,2);
   g.state.boss.remaining=1;nonclearFixture(g);g.act('drop');
   assert.equal(g.state.boss.phase,2);assert.equal(g.state.boss.K,8);assert.equal(g.state.charge,1);
-  assert.equal(g.state.boss.stageLocks,2);assert.equal(g.state.boss.stagger,true);
+  assert.equal(g.state.boss.stageLocks,2);assert.equal(g.state.boss.stagger,false);
   g.state.boss.hp=570;clearFixture(g,4);g.act('drop');
   assert.equal(g.state.boss.pendingPhase,3);assert.equal(g.state.boss.phase,2);
   g.state.boss.remaining=1;nonclearFixture(g);g.act('drop');

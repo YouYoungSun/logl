@@ -9,7 +9,8 @@ const canvas=$('gameCanvas'),ctx=canvas.getContext('2d');
 const W=1100,H=680;
 const LAYOUT={board:{x:150,y:60,cell:27},boss:{x:550,y:160,w:330,h:350}};
 const COLORS={I:'#65d8d0',J:'#739fc9',L:'#d7a56e',O:'#ddca91',S:'#88b6a4',T:'#aa97c5',Z:'#c77f82',G:'#566575'};
-const KEY='faultline.records.v1';
+const KEY='faultline.records.v2';
+const PHASE_NAMES=['','관측','붕괴','일식'];
 function readStore(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
 function writeStore(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}
 let sound=readStore('faultline.sound',true),reduced=readStore('faultline.motion',matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -17,6 +18,7 @@ const audio=new AudioDirector(sound),fx=new Effects(audio);
 const review=new DeathReview(),physicalKeys=new Set(),physicalPointers=new Set();
 let game=null,paused=false,modalKind='',saved=false,lastTime,acc=0,previousStatus='',uiTimer=0,toastUntil=0;
 let hpTrail=0,pendingHp=[],recordedActions=[],direction=0,dirAge=0,dirRepeats=0;
+let choiceLocked=false,guideSection='buffs',recordsMode='standard';
 const pressed=new Set();
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const fmtTime=n=>`${Math.floor(n/60).toString().padStart(2,'0')}:${Math.floor(n%60).toString().padStart(2,'0')}`;
@@ -27,8 +29,12 @@ export const getGame=()=>game;
 
 function toast(text){$('toast').textContent=text;$('toast').classList.add('show');toastUntil=performance.now()+2200;}
 function clearInput(){pressed.clear();direction=0;dirAge=0;dirRepeats=0;acc=0;}
-function modal(html,kind,narrow=false){modalKind=kind;$('modalContent').className='modal-content'+(narrow?' narrow':'');$('modalContent').innerHTML=html;$('modal').hidden=false;clearInput();}
-function closeModal(){modalKind='';$('modal').hidden=true;clearInput();lastTime=undefined;canvas.focus({preventScroll:true});}
+function modal(html,kind,narrow=false){
+  modalKind=kind;const panel=$('modalContent');panel.className='modal-content'+(narrow?' narrow':'');panel.innerHTML=html;$('modal').hidden=false;clearInput();
+  const heading=panel.querySelector('h2');if(heading){heading.id='menuTitle';heading.tabIndex=-1;panel.setAttribute('aria-labelledby','menuTitle');heading.focus({preventScroll:true});}
+  panel.scrollTop=0;
+}
+function closeModal(){modalKind='';$('modal').hidden=true;clearInput();lastTime=undefined;(game?canvas:$('startBtn')).focus({preventScroll:true});}
 function resetReview(){review.close();$('deathNotice').hidden=true;}
 function beginDeathReview(){
   if(review.active||!game||game.state.status!=='dead')return;
@@ -41,11 +47,18 @@ function beginDeathReview(){
 }
 function finishDeathReview(){resetReview();showResult();}
 function randomSeed(){try{const n=new Uint32Array(1);crypto.getRandomValues(n);return n[0].toString(36).toUpperCase();}catch{return Date.now().toString(36).toUpperCase();}}
-export function startRun(seed){
+export function startRun(seed,options={}){
   const value=(seed??$('seedInput').value).trim()||randomSeed();
-  resetReview();game=new Game(value);fx.reset(1);saved=false;paused=false;previousStatus='playing';recordedActions=[];
-  pendingHp=[];hpTrail=game.state.boss.maxHp;clearInput();closeModal();$('startScreen').hidden=true;
-  audio.unlock();updateUi();canvas.focus({preventScroll:true});
+  resetReview();game=new Game(value,options);fx.reset(game.state.stage);saved=false;paused=false;previousStatus=game.state.status;recordedActions=[];choiceLocked=false;
+  pendingHp=[];hpTrail=game.state.boss?.maxHp||0;clearInput();closeModal();$('startScreen').hidden=true;
+  audio.unlock();updateUi();
+  if(game.state.status==='rebuild'){paused=true;showReward();}else canvas.focus({preventScroll:true});
+}
+function retryPrevious(){const target=Math.max(1,game.state.stage-1);startRun(game.seed,{startStage:target,mode:'assisted'});}
+function beginPrepared(){
+  if(!game?.beginPreparedRun())return;
+  fx.reset(game.state.stage);pendingHp=[];hpTrail=game.state.boss.maxHp;paused=false;previousStatus='playing';closeModal();
+  onEvents(game.drainEvents());audio.unlock();updateUi();toast(`${game.state.stage}구역 재도전 시작`);
 }
 function goHome(){resetReview();game=null;paused=false;previousStatus='';fx.reset(0);closeModal();$('startScreen').hidden=false;updateUi();}
 function act(action){
@@ -61,14 +74,27 @@ function onEvents(events){
     if(e.type==='bossAttack'&&e.regen)hpTrail=Math.max(hpTrail,game.state.boss.hp);
     if(e.type==='death'){$('liveStatus').textContent=e.reason;beginDeathReview();}
     if(e.type==='stageClear')$('liveStatus').textContent=`${e.stage}구역 돌파`;
+    if(e.type==='phaseChange'){
+      const message=`최종 보스 ${e.phase}페이즈 · ${PHASE_NAMES[e.phase]}${e.phase===2?' — 간헐적 진동':e.phase===3?' — 다음 블록이 잠시 가려집니다':''}`;
+      toast(message);$('liveStatus').textContent=message;
+    }
   }
 }
+function turnChoicePage(render){
+  choiceLocked=true;const panel=$('modalContent');if(!reduced)panel.classList.add('page-leaving');
+  setTimeout(()=>{if(game){render();if(!reduced)$('modalContent').classList.add('page-entering');}choiceLocked=false;},reduced?0:160);
+}
 function choose(index){
-  if(!game||modalKind!=='reward')return;
-  if(!game.choose(index))return;
+  if(!game||!['reward','rebuild'].includes(modalKind)||choiceLocked)return;
+  const rebuilding=game.state.status==='rebuild';if(!game.choose(index))return;
+  if(rebuilding){turnChoicePage(()=>game.state.status==='ready'?showPrepared():showReward());return;}
   closeModal();paused=false;fx.reset(game.state.stage);hpTrail=game.state.boss.maxHp;pendingHp=[];
   onEvents(game.drainEvents());previousStatus='playing';updateUi();
   toast(`${pad(game.state.stage)}구역 · ${STAGES[game.state.stage-1].name}`);
+}
+function reroll(){
+  if(choiceLocked||!['reward','rebuild'].includes(modalKind)||!game?.rerollOffers())return;
+  turnChoicePage(showReward);
 }
 function pause(){
   if(!game||game.state.status!=='playing')return;
@@ -79,40 +105,76 @@ function resume(){paused=false;closeModal();audio.unlock();}
 function tags(state){return Object.entries(state.upgrades).filter(([,r])=>r).map(([k,r])=>`<span class="tag">${UPGRADES[k].label} ${r}</span>`).join('')+Object.entries(state.burdens).filter(([,r])=>r).map(([k,r])=>`<span class="tag bad">${BURDENS[k].label} ${r}</span>`).join('');}
 function example(def,rank){return def.example?`<details class="ability-example"><summary>예시 보기</summary><p>${esc(def.example(rank))}</p></details>`:'';}
 function glossary(){return '<details class="ability-glossary"><summary>기본 용어 보기</summary><p><b>고정:</b> 떨어지던 블록을 놓아 위치가 확정되는 것.<br><b>연쇄:</b> 블록을 놓을 때마다 계속 줄을 지우는 것. 기본적으로 한 번 못 지우면 끝납니다.<br><b>전하:</b> 다음 줄 제거에 모두 사용하는 추가 공격 자원. 최대 4개.<br><b>높이:</b> 바닥부터 가장 높은 블록까지의 칸 수. 이번에 놓을 블록도 포함해 판정합니다.</p></details>';}
-function showReward(){
-  const s=game.state,next=STAGES[s.stage];
-  const cards=s.offers.map((o,i)=>{
+function choiceCards(s,next){
+  return s.offers.map((o,i)=>{
     const ur=s.upgrades[o.upgrade]+1,br=s.burdens[o.burden]+1;
-    const b={...s.burdens,[o.burden]:br},hp=Math.floor(next.hp*(1+.08*b.vitality)+.5),K=Math.max(4,next.K-b.haste);
+    const burdens={...s.burdens,[o.burden]:br},hp=Math.floor(next.hp*(1+.08*burdens.vitality)+.5),K=Math.max(4,next.K-burdens.haste);
     const u=UPGRADES[o.upgrade],risk=BURDENS[o.burden];
-    return `<article class="reward-card" aria-labelledby="reward-title-${i}"><div class="card-index">CHOICE 0${i+1}<span class="card-level">LV ${s.upgrades[o.upgrade]} → ${ur}</span></div><h3 id="reward-title-${i}">${u.label}</h3><span class="condition-tag">${u.trigger}</span><p class="card-description">${u.description(ur)}</p>${example(u,ur)}<div class="burden-block"><b>＋ ${risk.label} ${s.burdens[o.burden]} → ${br}</b><p>${risk.description(br)}</p>${example(risk,br)}</div><div class="card-preview">다음 보스 HP ${hp.toLocaleString()} / 블록 ${K}개마다 공격<br>전투 시작 후 침식 ${b.erosion}행 · 내 피해 ×${(1-.04*b.dampen).toFixed(2)}</div><button class="pick-label" type="button" data-choice="${i}">이 개조와 위험 선택 <span>↗</span></button></article>`;
+    return `<article class="reward-card" aria-labelledby="reward-title-${i}"><div class="card-index">CHOICE 0${i+1}</div><div class="effect-heading buff-heading">＋ 버프 · 유리한 효과 <span>Lv.${s.upgrades[o.upgrade]} → ${ur}</span></div><h3 id="reward-title-${i}">${esc(u.label)}</h3><span class="condition-tag">${esc(u.trigger)}</span><p class="card-description">${esc(u.description(ur))}</p><details class="effect-comparison"><summary>현재 효과와 비교</summary><p>현재: ${s.upgrades[o.upgrade]?esc(u.description(s.upgrades[o.upgrade])):'미보유'}</p><p>선택 후: ${esc(u.description(ur))}</p></details>${example(u,ur)}<div class="burden-block"><div class="effect-heading debuff-heading">− 디버프 · 함께 받는 불이익 <span>Lv.${s.burdens[o.burden]} → ${br}</span></div><h4>${esc(risk.label)}</h4><p>${esc(risk.description(br))}</p><details class="effect-comparison"><summary>현재 불이익과 비교</summary><p>현재: ${s.burdens[o.burden]?esc(risk.description(s.burdens[o.burden])):'미보유'}</p><p>선택 후: ${esc(risk.description(br))}</p></details>${example(risk,br)}</div><div class="card-preview">${s.status==='rebuild'?'시작':'다음'} 보스 HP ${hp.toLocaleString()} · 공격 간격 ${K}블록<br>초반 방해 ${burdens.erosion}행 · 내 피해 ×${(1-.04*burdens.dampen).toFixed(2)}</div><button class="pick-label" type="button" data-choice="${i}">버프와 디버프 함께 획득 <span>↗</span></button></article>`;
   }).join('');
-  modal(`<div class="reward-top"><div><p class="modal-eyebrow">SECTOR ${pad(s.stage)} CLEARED / ${count(s.upgrades)+1} OF 9</p><h2>무엇을 감당할 것인가.</h2><p class="modal-copy">강화와 부담을 함께 선택하세요. 이전 선택은 모두 남습니다.</p></div><div class="reward-next">NEXT ${pad(s.stage+1)} / ${next.name}<br>${s.stage===9?'최종 보스 · 3페이즈':'다음 전투는 빈 보드에서 시작합니다'}</div></div>${glossary()}<div class="reward-grid">${cards}</div><div class="loadout-summary">${tags(s)||'<span class="note">첫 번째 누적 선택입니다.</span>'}</div><p class="note">① ② ③ 키로 선택 가능 · 스테이지마다 보드·홀드 초기화 · 시작 시드 ${esc(game.seed)}</p>`,'reward');
+}
+function showReward(){
+  const s=game.state,rebuilding=s.status==='rebuild',target=rebuilding?s.rebuildTarget:s.stage+1,next=STAGES[target-1];
+  const progress=rebuilding?`<div class="rebuild-progress" aria-label="능력 선택 ${s.rebuildStep}/${s.rebuildTotal}">${Array.from({length:s.rebuildTotal},(_,i)=>`<span class="${i<s.rebuildStep-1?'done':i===s.rebuildStep-1?'current':''}">${i+1}</span>`).join('')}</div>`:'';
+  modal(`<div class="choice-page"><div class="reward-top"><div><p class="modal-eyebrow">${rebuilding?`REBUILD / 능력 선택 ${s.rebuildStep} OF ${s.rebuildTotal}`:`SECTOR ${pad(s.stage)} CLEARED / 선택 ${count(s.upgrades)+1} OF 9`}</p><h2>${rebuilding?`${target}구역 재도전 준비`:'다음 전투를 위한 선택'}</h2><p class="modal-copy">${rebuilding?`이전 능력은 초기화되었습니다. ${s.rebuildTotal}번의 보상을 하나씩 다시 선택하세요.`:'버프 하나와 디버프 하나를 함께 받습니다. 이전 선택은 계속 유지됩니다.'}</p></div><div class="reward-next">${rebuilding?'START':'NEXT'} ${pad(target)} / ${next.name}<br>${target===10?'최종 보스 · 관측 / 붕괴 / 일식':'전투는 빈 보드에서 시작합니다'}</div></div>${progress}<div class="choice-toolbar"><button type="button" data-ui="reroll" ${s.rerollsLeft?'':'disabled'}>${s.rerollsLeft?'선택지 새로고침 · 무료 1/1':'새로고침 사용 완료 · 0/1'}</button><span>세 카드의 버프·디버프 조합을 함께 다시 추첨합니다.</span></div>${glossary()}<div class="reward-grid">${choiceCards(s,next)}</div><p class="section-caption">현재까지 선택한 능력</p><div class="loadout-summary">${tags(s)||'<span class="note">아직 선택한 능력이 없습니다.</span>'}</div><p class="note">① ② ③ 키로 선택 · 매 선택 화면에서 새로고침 1회 · SEED ${esc(game.seed)}</p>${rebuilding?'<div class="modal-actions"><button data-ui="home">준비를 그만두고 처음으로</button></div>':''}</div>`,rebuilding?'rebuild':'reward');
+}
+function buildItems(s){
+  return [[UPGRADES,s.upgrades,false],[BURDENS,s.burdens,true]].map(([defs,levels,bad])=>Object.entries(levels).filter(([,r])=>r).map(([k,r])=>`<div class="build-item${bad?' bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프':'＋ 버프'} · Lv.${r}</span><strong>${esc(defs[k].label)}</strong><p>${esc(defs[k].description(r))}</p>${example(defs[k],r)}</div>`).join('')).join('');
+}
+function showPrepared(){
+  const s=game.state;
+  modal(`<p class="modal-eyebrow">REBUILD COMPLETE / ${s.rebuildTotal} OF ${s.rebuildTotal}</p><h2>${s.stage}구역으로 돌아갈 준비가 됐습니다.</h2><p class="modal-copy">아래 버프·디버프를 가지고 빈 보드에서 시작합니다. 전투는 시작 버튼을 누르면 진행됩니다.</p><div class="build-list">${buildItems(s)}</div><div class="modal-actions"><button class="primary" data-ui="prepared">${s.stage}구역 전투 시작 →</button><button data-ui="home">처음 화면으로</button></div>`,'prepared');
 }
 function saveRecord(){
   if(saved)return;saved=true;const s=game.state;
-  const row={seed:game.seed,cleared:s.stats.cleared,progress:s.status==='won'?1:1-s.boss.hp/s.boss.maxHp,locks:s.stats.locks,seconds:s.stats.seconds,lines:s.stats.lines,version:RULES_VERSION,at:Date.now()};
+  const row={seed:game.seed,mode:s.mode||'standard',startStage:s.startStage||1,stage:s.stage,cleared:s.stats.cleared,progress:s.status==='won'?1:1-s.boss.hp/s.boss.maxHp,locks:s.stats.locks,seconds:s.stats.seconds,lines:s.stats.lines,version:RULES_VERSION,at:Date.now()};
   const old=readStore(KEY,[]);const list=(Array.isArray(old)?old:[]).filter(x=>x.version===RULES_VERSION);list.push(row);
   list.sort((a,b)=>b.cleared-a.cleared||b.progress-a.progress||a.locks-b.locks||a.seconds-b.seconds);
-  writeStore(KEY,list.slice(0,20));
+  writeStore(KEY,['standard','assisted'].flatMap(mode=>list.filter(r=>(r.mode||'standard')===mode).slice(0,20)));
 }
 function showResult(){
-  const s=game.state,won=s.status==='won';saveRecord();
-  modal(`<p class="modal-eyebrow">${won?'ALL SECTORS CLEARED':'RUN TERMINATED'} / SEED ${esc(game.seed)}</p><h2>${won?'단층을 돌파했다.':'이번 런은 여기까지.'}</h2><p class="modal-copy">${won?'아홉 번의 선택으로 최종 구조체를 무너뜨렸습니다.':esc(s.reason)}<br>${won?'새로운 선택으로 다시 도전할 수 있습니다.':'다음 런은 빈 보드, 무강화 상태로 다시 시작합니다.'}</p><div class="stat-grid"><div><b>${pad(s.stats.cleared)} / 10</b><small>돌파한 구역</small></div><div><b>${s.stats.locks}</b><small>고정한 블록</small></div><div><b>${fmtTime(s.stats.seconds)}</b><small>활성 전투 시간</small></div></div><div class="loadout-summary">${tags(s)}</div><p class="note">최대 연쇄 ${s.stats.maxCombo} · 제거 ${s.stats.lines}줄 · 실제 피해 ${s.stats.damage.toLocaleString()}<br>기록은 이 기기에 저장됩니다.</p><div class="modal-actions"><button class="primary" data-ui="retry">같은 시드 재도전</button><button data-ui="new">새 런 시작</button><button data-ui="records">기록 보기</button><button data-ui="home">처음으로</button></div>`,'result',true);
+  const s=game.state,won=s.status==='won',target=Math.max(1,s.stage-1),assisted=s.mode==='assisted';saveRecord();
+  modal(`<p class="modal-eyebrow">${won?'ALL SECTORS CLEARED':'RUN TERMINATED'} / ${assisted?'중간 구역 재도전':'1구역부터 도전'}</p><h2>${won?'단층을 돌파했다.':'다시 도전할 수 있습니다.'}</h2><p class="modal-copy">${won?'최종 구조체를 무너뜨렸습니다.':esc(s.reason)}<br>${assisted?`${s.startStage}구역에서 시작한 도전입니다. 생략한 구역의 처치 수는 기록에 포함하지 않습니다.`:'1구역부터 진행한 도전입니다.'}</p><div class="stat-grid"><div><b>${s.stats.cleared}개</b><small>이번에 처치한 보스</small></div><div><b>${s.stage}구역</b><small>${won?'최종 돌파':'도달 구역'}</small></div><div><b>${fmtTime(s.stats.seconds)}</b><small>활성 전투 시간</small></div></div><div class="loadout-summary">${tags(s)}</div><p class="note">최대 연쇄 ${s.stats.maxCombo} · 제거 ${s.stats.lines}줄 · 실제 피해 ${s.stats.damage.toLocaleString()}<br>SEED ${esc(game.seed)} · 기록은 도전 방식별로 이 기기에 저장됩니다.</p><div class="retry-options"><button class="primary" data-ui="retry"><b>1구역부터 새로 도전</b><small>능력을 초기화하고 같은 시드로 다시 시작</small></button>${!won&&target>1?`<button class="retry-assisted" data-ui="previous"><b>${target}구역부터 재도전</b><small>능력을 새로 ${target-1}번 선택한 뒤 시작</small></button>`:''}</div>${!won?`<p class="note">${target>1?'한 구역 전부터 다시 도전하며 다른 능력 조합을 만들 수 있습니다.':'1·2구역에서 사망하면 1구역부터 다시 시작합니다.'}</p>`:''}<div class="modal-actions"><button data-ui="new">새 시드로 1구역부터</button><button data-ui="records">기록 보기</button><button data-ui="home">처음 화면으로</button></div>`,'result',true);
 }
 function showBuild(){
-  if(!game)return;paused=true;
-  const s=game.state,items=(defs,counts,bad)=>Object.entries(counts).filter(([,r])=>r).map(([k,r])=>`<div class="build-item${bad?' bad':''}"><strong>${defs[k].label} · ${r}</strong><p>${defs[k].description(r)}</p>${example(defs[k],r)}</div>`).join('');
-  modal(`<p class="modal-eyebrow">CURRENT BUILD / ${count(s.upgrades)} OF 9</p><h2>누적된 선택</h2><p class="modal-copy">전투는 일시정지되어 있습니다. 새 선택이 이전 효과를 지우지 않습니다.</p>${glossary()}<div class="build-list">${items(UPGRADES,s.upgrades,false)}${items(BURDENS,s.burdens,true)||'<p class="note">아직 부담이 없습니다.</p>'}</div><div class="modal-actions"><button class="primary" data-ui="resume">전투로 돌아가기</button></div>`,'build');
+  if(!game)return;paused=true;const s=game.state;
+  modal(`<p class="modal-eyebrow">CURRENT BUILD / ${count(s.upgrades)} OF 9</p><h2>누적된 버프와 디버프</h2><p class="modal-copy">전투는 일시정지되어 있습니다. 새 선택이 이전 효과를 지우지 않습니다.</p>${glossary()}<div class="build-list">${buildItems(s)||'<p class="note">아직 선택한 능력이 없습니다.</p>'}</div><div class="modal-actions"><button class="primary" data-ui="resume">전투로 돌아가기</button><button data-ui="guide">능력 도감</button></div>`,'build');
+}
+const GUIDE_NOTES={
+  single:'두 번에 걸쳐 1줄씩 지워도 각각 적용됩니다. 한 번에 2줄을 지우면 적용되지 않습니다.',
+  middle:'2줄과 3줄을 한 번에 지우는 정리형 플레이에 적합합니다. 1줄·4줄 공격은 강화하지 않습니다.',
+  compress:'한 번에 4줄을 지워야 합니다. 1줄을 네 번 지우는 것으로는 발동하지 않습니다.',
+  repeat:'적용: 4줄 → 못 지움 → 4줄. 미적용: 4줄 → 1줄 → 4줄. 연쇄와 달리 중간의 비제거는 허용됩니다.',
+  combo:'연쇄는 블록 하나를 놓을 때마다 이어서 줄을 지우는 것입니다. 1줄 → 1줄 → 2줄 제거도 3연쇄입니다. 6연쇄 이후에도 연쇄는 이어지지만 피해 배율은 더 오르지 않습니다.',
+  grace:'제거 → 실패 → 제거 → 실패라면 마지막 실패에서 끝납니다. 중간에 줄을 지워도 보호 횟수는 회복되지 않습니다.',
+  charge:'전하 3개를 모아 공격하면 3개를 모두 소비합니다. 전하는 구역을 넘길 때 초기화되고, 추가 피해도 보스 방어와 내 공격력 감소의 영향을 받습니다.',
+  convert:'연쇄 보호가 실패를 막아줬다면 아직 연쇄가 끝난 것이 아니므로 발동하지 않습니다. 공격 충전이 없어도 사용할 수 있고, 그때는 전하당 피해 3입니다.',
+  high:'이번에 놓은 블록까지 포함해 바닥부터 최고 높이를 셉니다. 줄이 사라진 뒤 낮아져도 이번 공격에는 적용됩니다.',
+  low:'배치 후 높이 8칸에서 4줄을 지워 4칸이 되어도 이번 공격에는 적용되지 않습니다. 지우기 전부터 6칸 이하여야 합니다.',
+  opening:'첫 두 블록이 아니라 첫 두 번의 줄 제거입니다. 기본 체력은 보스 체력 증가 디버프를 적용하기 전 수치이며, 추가 피해에도 방어와 내 공격력 감소가 적용됩니다.',
+  repair:'회색 방해 행이 남아 있을 때만 사용 횟수를 소비합니다. 추가 제거는 피해·연쇄·제거 줄 수를 늘리지 않습니다. 2레벨부터 재사용 사이에 블록 6개를 더 놓아야 합니다.',
+  vitality:'현재 공격 간격은 바뀌지 않습니다. 보스가 더 많은 피해를 받아야 쓰러지므로 전투가 길어질 수 있습니다.',
+  dampen:'줄 제거 피해뿐 아니라 전하와 선제 타격의 추가 피해에도 적용됩니다.',
+  haste:'예를 들어 원래 9블록마다 공격했다면 1레벨은 8블록마다 공격합니다. 블록 낙하 속도는 바뀌지 않습니다.',
+  erosion:'2레벨이면 첫 블록 뒤 1행, 두 번째 블록 뒤 1행으로 총 2행입니다. 일반 보스 공격과 별개이며 보스 체력 회복을 발동시키지 않습니다.',
+  regen:'회복하는 쪽은 플레이어가 아니라 보스입니다. 최대 체력 1000이면 1레벨에서 공격할 때마다 약 5를 회복합니다.',
+  rigidity:'착지한 뒤 옆으로 움직이거나 회전할 여유가 줄어듭니다. 즉시 낙하는 원래 바로 고정되므로 동작이 달라지지 않습니다.'
+};
+function showGuide(section=guideSection){
+  guideSection=section;if(game?.state.status==='playing')paused=true;
+  const defs=section==='debuffs'?BURDENS:UPGRADES,bad=section==='debuffs';
+  const cards=Object.entries(defs).map(([key,def])=>`<article class="guide-card ${bad?'bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프 · 불이익':'＋ 버프 · 유리한 효과'}</span><h3>${esc(def.label)}</h3>${def.trigger?`<p class="guide-trigger">발동 조건 · ${esc(def.trigger)}</p>`:''}<div class="guide-levels">${Array.from({length:def.max},(_,i)=>`<p><b>Lv.${i+1}</b> ${esc(def.description(i+1))}</p>`).join('')}</div><div class="guide-example"><b>구체적인 예시 · 1레벨 기준</b><p>${esc(def.example?.(1)||'')}</p></div><p class="guide-note"><b>알아두기</b><br>${esc(GUIDE_NOTES[key]||'')}</p></article>`).join('');
+  const rules=`<div class="guide-rules"><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>보스를 쓰러뜨릴 때마다 세 카드 중 하나를 고릅니다. 선택한 두 효과는 다음 구역부터 함께 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>연쇄와 전하</h3><p>블록을 놓을 때마다 줄을 지우면 연쇄가 이어집니다. 기본 피해 배율은 1·2·3연쇄에 100·115·130%입니다. 전하는 다음 줄 제거에 모두 쓰는 추가 공격 자원이며 최대 4개입니다.</p></article><article><h3>피해와 높이 판정</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 4줄 강화와 4줄 재공격 같은 피해 보너스는 합산하고, 연쇄 배율은 별도로 곱합니다. 높이는 이번 블록을 놓은 뒤, 줄이 사라지기 전에 판정합니다.</p></article><article><h3>회색 방해 행</h3><p>한 번의 공격으로 2~3행이 올라오면 그 묶음의 빈칸은 같은 열입니다. 다음 공격은 다시 랜덤이며, 운이 좋으면 같은 열이 계속 나올 수도 있습니다. 보드 오른쪽에서 실제로 올라올 모양을 미리 확인하세요.</p></article><article><h3>죽어도 다시 빌드를 만들 수 있습니다</h3><p>5구역에서 죽었다면 4구역부터 재도전할 수 있습니다. 이전 능력은 지우고, 1~3구역 보상에 해당하는 세 번의 선택으로 새 조합을 만든 뒤 전투를 시작합니다. 각 선택 화면마다 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
+  modal(`<div class="guide-header"><div><p class="modal-eyebrow">FIELD GUIDE / VER 2.0.0</p><h2>버프 · 디버프 도감</h2><p class="modal-copy">조건부터 예외까지 읽고, 원하는 조합을 찾아보세요.</p></div><button data-ui="guideClose" type="button">${game?.state.status==='playing'?'전투로 돌아가기':'닫기'}</button></div><nav class="guide-tabs" aria-label="도감 분류"><button data-guide="buffs" aria-pressed="${section==='buffs'}">버프 ${Object.keys(UPGRADES).length}개</button><button data-guide="debuffs" aria-pressed="${section==='debuffs'}">디버프 ${Object.keys(BURDENS).length}개</button><button data-guide="rules" aria-pressed="${section==='rules'}">기본 규칙과 재도전</button></nav>${section==='rules'?rules:`<div class="guide-grid">${cards}</div>`}<div class="modal-actions"><button class="primary" data-ui="guideClose">${game?.state.status==='playing'?'전투로 돌아가기':'처음 화면으로'}</button></div>`,'guide');
 }
 function showHelp(){
   const during=!!game&&game.state.status==='playing';if(during)paused=true;
   modal(`<p class="modal-eyebrow">FIELD MANUAL</p><h2>줄을 지워 공격한다.</h2><p class="modal-copy">10구역을 돌파하세요. 상단이 막히면 런이 끝납니다.<br>1~9구역 승리 뒤 강화와 지속 부담을 함께 고릅니다.<br>다음 구역은 빈 보드와 빈 홀드에서 시작합니다.<br>보스의 공격 카운트는 블록을 고정할 때마다 줄어듭니다.</p>${glossary()}<div class="help-list"><span>좌우 이동 <b>← / →</b></span><span>빠른 낙하 <b>↓</b></span><span>시계 회전 <b>X / ↑</b></span><span>반시계 회전 <b>Z</b></span><span>즉시 낙하 <b>SPACE</b></span><span>홀드 <b>C / SHIFT</b></span><span>일시정지 <b>P / ESC</b></span><span>보상 선택 <b>1 / 2 / 3</b></span></div><p class="modal-copy">1·2·3·4줄 기본 피해: 10 / 24 / 42 / 64<br>연속 고정에서 줄을 지우면 연쇄가 쌓입니다.<br>대응 창: 마지막 3고정에 총 2줄을 지우면 예정 공격 1행 감소.<br>노출 창: 방어 ×0.65 → 노출 ×1.35. 공격할 순간을 고르세요.<br>전투가 길어지면 방해 공격이 강해집니다.</p><div class="modal-actions"><button class="primary" data-ui="${during?'resume':'close'}">${during?'전투로 돌아가기':'알겠어요'}</button></div>`,'help',true);
 }
-function showRecords(){
-  if(game&&game.state.status==='playing')paused=true;
-  const raw=readStore(KEY,[]),list=(Array.isArray(raw)?raw:[]).filter(r=>r.version===RULES_VERSION);
-  modal(`<p class="modal-eyebrow">LOCAL RECORDS</p><h2>이 기기의 기록</h2><p class="modal-copy">돌파 구역 → 보스 진행률 → 고정 수 → 전투 시간 순입니다.</p>${list.length?`<table class="records-table"><thead><tr><th>#</th><th>구역</th><th>블록</th><th>시간</th><th>시드</th></tr></thead><tbody>${list.slice(0,10).map((r,i)=>`<tr><td>${pad(i+1)}</td><td>${r.cleared}/10</td><td>${r.locks}</td><td>${fmtTime(r.seconds)}</td><td>${esc(r.seed)}</td></tr>`).join('')}</tbody></table>`:'<p class="note">아직 끝낸 런이 없습니다. 첫 기록을 남겨보세요.</p>'}<div class="modal-actions"><button class="primary" data-ui="${game?.state.status==='playing'?'resume':game?'result':'close'}">돌아가기</button></div>`,'records',true);
+function showRecords(mode=recordsMode){
+  recordsMode=mode;if(game&&game.state.status==='playing')paused=true;
+  const raw=readStore(KEY,[]),list=(Array.isArray(raw)?raw:[]).filter(r=>r.version===RULES_VERSION&&(r.mode||'standard')===mode);
+  modal(`<p class="modal-eyebrow">LOCAL RECORDS / VER 2</p><h2>이 기기의 기록</h2><nav class="guide-tabs" aria-label="도전 방식"><button data-records="standard" aria-pressed="${mode==='standard'}">1구역부터 도전</button><button data-records="assisted" aria-pressed="${mode==='assisted'}">중간 구역 재도전</button></nav><p class="modal-copy">두 방식의 기록을 따로 보관합니다. 처치 수에는 실제로 쓰러뜨린 보스만 포함됩니다.</p>${list.length?`<div class="records-scroll"><table class="records-table"><thead><tr><th>#</th><th>시작 → 도달</th><th>처치</th><th>시간</th><th>시드</th></tr></thead><tbody>${list.slice(0,10).map((r,i)=>`<tr><td>${pad(i+1)}</td><td>${r.startStage||1} → ${r.stage||r.cleared+1}</td><td>${r.cleared}개</td><td>${fmtTime(r.seconds)}</td><td>${esc(r.seed)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">아직 끝낸 도전이 없습니다.</p>'}<div class="modal-actions"><button class="primary" data-ui="${game?.state.status==='playing'?'resume':game?'result':'close'}">돌아가기</button></div>`,'records',true);
 }
 function updateUi(){
   const s=game?.state;
@@ -120,7 +182,7 @@ function updateUi(){
   $('buildCount').textContent=s?pad(count(s.upgrades)):'00';
   $('soundBtn').textContent=`소리 ${sound?'ON':'OFF'}`;$('soundBtn').setAttribute('aria-pressed',String(sound));
   $('motionBtn').textContent=reduced?'효과 감소':'효과 기본';$('motionBtn').setAttribute('aria-pressed',String(reduced));
-  $('footerHint').textContent=s?`SEED ${game.seed} · ${s.stats.locks} BLOCKS · ${fmtTime(s.stats.seconds)}`:'정규 런 · 사망 시 전부 초기화';
+  $('footerHint').textContent=s?`${s.mode==='assisted'?'재도전':'정규'} · SEED ${game.seed} · ${s.stats.locks} BLOCKS · ${fmtTime(s.stats.seconds)}`:'사망 후 1구역부터 또는 한 구역 전부터 재도전';
 }
 
 function text(str,x,y,size=12,color='#879ca9',align='left',mono=false){ctx.font=`${size}px ${mono?'GameMono,Consolas,monospace':'"Segoe UI","Malgun Gothic",sans-serif'}`;ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(str,x,y);}
@@ -143,12 +205,19 @@ function background(time){
 function draw(state){
   ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);background(fx.time);
   if(!state){
-    drawBoss(ctx,{x:650,y:120,w:350,h:390,time:fx.time,attackProgress:.1,reducedMotion:reduced});
     text('PROTOCOL / 10',1040,44,10,'#516876','right',true);return;
   }
   const s=state,b=s.boss,cfg=STAGES[s.stage-1],{x,y,cell}=LAYOUT.board;
+  if(!b||s.status==='rebuild'||s.status==='ready')return;
+  // Only the canvas scene moves; modal buttons and pointer targets stay stationary.
+  if(s.stage===10&&b.phase>=2&&s.status==='playing'&&!paused&&!reduced&&b.phaseElapsed%5<.55){
+    ctx.translate(Math.sin(b.phaseElapsed*53)*1.8,Math.cos(b.phaseElapsed*47)*1.3);
+  }
   const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x,recoilY:fx.recoil.y,flash:fx.flash,death:fx.death,reducedMotion:reduced};
   drawBoss(ctx,opts);
+  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
+    const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
+  }
   ctx.fillStyle='#0b131e';ctx.fillRect(x,y,cell*10,cell*20);
   for(let row=0;row<20;row++)for(let col=0;col<10;col++){
     ctx.strokeStyle='#26374640';ctx.strokeRect(x+col*cell+.5,y+row*cell+.5,cell,cell);
@@ -175,15 +244,21 @@ function draw(state){
   text(`SECTOR ${pad(s.stage)} / 10`,x,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+270,y-21,11,'#65ddd0','right');
   text('HOLD',83,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(46,90,76,68);mini(s.held,84,113,14,s.canHold?1:.35);
   if(!s.canHold&&s.held)text('LOCKED',84,174,8,'#6c7e89','center',true);
-  text('NEXT',84,226,9,'#708c9b','center',true);s.queue.slice(0,5).forEach((t,i)=>mini(t,84,244+i*53,13,i? .65:1));
+  text('NEXT',84,226,9,'#708c9b','center',true);
+  const obscured=s.stage===10&&b.phase===3&&b.obscureRemaining>0;
+  if(obscured){
+    for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(51,240+i*53,66,39);text('?',84,267+i*53,23,'#b2a6c9','center',true);}
+    text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,84,532,9,'#c3b0e0','center',true);
+  }else s.queue.slice(0,5).forEach((t,i)=>mini(t,84,244+i*53,13,i? .65:1));
   text('COMBO',x,631,9,'#688393','left',true);text(s.combo?`${s.combo} CHAIN`:'—',x,654,17,s.combo?'#65ddd0':'#435966','left',true);
   text('CHARGE',x+166,631,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+166+i*25,643,19,6);}
   text(`${s.stage===10?'FINAL STRUCTURE':'HOSTILE STRUCTURE'} / ${pad(s.stage)}`,550,55,9,'#718d9b','left',true);
   text(s.stage===10?'특이점':`구조체 — ${cfg.name}`,550,88,25,'#e5eae5');
   text(`${Math.ceil(b.hp).toLocaleString()} / ${b.maxHp.toLocaleString()}`,895,85,11,'#b9cbc9','right',true);
   ctx.fillStyle='#23313a';ctx.fillRect(550,104,345,5);ctx.fillStyle='#efae6366';ctx.fillRect(550,104,345*clamp(hpTrail/b.maxHp,0,1),5);ctx.fillStyle=b.exposed?'#efae63':'#65ddd0';ctx.fillRect(550,104,345*clamp(b.hp/b.maxHp,0,1),5);
-  text(s.stage===10?`PHASE ${b.phase} / 3`:b.armor?(b.exposed?'노출 ×1.35':'방어 ×0.65'):'직접 타격 ×1.00',550,133,10,b.exposed?'#efae63':'#839ca7','left',s.stage===10);
-  if(b.pendingPhase>b.phase)text(`다음 주기 → PHASE ${b.pendingPhase}`,895,133,9,'#efae63','right');
+  text(s.stage===10?`PHASE ${b.phase} / 3 · ${PHASE_NAMES[b.phase]}`:b.armor?(b.exposed?'노출 ×1.35':'방어 ×0.65'):'직접 타격 ×1.00',550,133,10,b.exposed?'#efae63':'#839ca7','left',s.stage===10);
+  if(b.pendingPhase>b.phase)text(`다음 주기 → ${PHASE_NAMES[b.pendingPhase]}`,895,133,9,'#efae63','right');
+  else if(s.stage===10&&b.phase===3)text(obscured?`일식 · NEXT 복귀 ${b.obscureRemaining.toFixed(1)}초`:`다음 일식 ${Math.ceil(b.obscureCooldown||0)}초`,895,133,10,'#c3b0e0','right');
   const tx=960;text('NEXT ATTACK',tx,183,9,'#8099a6','center',true);text(String(b.remaining).padStart(2,'0'),tx,227,42,b.remaining<=3?'#efae63':'#c6d6d9','center',true);text('블록 고정 후',tx,247,10,'#79919d','center');
   text(`${b.holes.length}행 투입`,tx,286,12,'#c9d5d6','center');
   b.holes.forEach((hole,i)=>{for(let col=0;col<10;col++){ctx.fillStyle=col===hole?'#0a1018':'#9c7756';ctx.fillRect(901+col*12,298+i*12,10,9);}ctx.strokeStyle='#71604b';ctx.strokeRect(900,297+i*12,121,11);});
@@ -192,14 +267,14 @@ function draw(state){
   const until=cfg.T-b.stageLocks;
   text(until>0?`장기전까지 ${until}고정`:`과부하 +${b.overload}행`,550,575,11,until<=10?'#efae63':'#718d9d');
   text(`전투 고정 ${b.stageLocks}  /  주기 ${b.K}`,550,595,9,'#4f6c7c','left',true);
-  if(s.upgrades.repair)text(`수복 ${s.repairLeft}회 · ${s.repairCooldown?`${s.repairCooldown}고정 대기`:'준비됨'}`,895,595,10,'#73968f','right');
+  if(s.upgrades.repair)text(`방해 제거 ${s.repairLeft}회 · ${s.repairCooldown?`${s.repairCooldown}고정 대기`:'준비됨'}`,895,595,10,'#73968f','right');
   text('BUILD',550,636,9,'#4f6c7c','left',true);text(`${count(s.upgrades)} 강화  /  ${count(s.burdens)} 부담`,550,656,12,'#9eafb6');
   if(s.status==='reward'||s.status==='won')text('구조체 붕괴',895,656,11,'#65ddd0','right');
   if(s.upgrades.high||s.upgrades.low){
     const top=s.board.findIndex(row=>row.some(Boolean));const height=top<0?0:s.board.length-top;
     const planned=s.active&&s.status==='playing'?Math.max(height,...cells({...s.active,y:game.ghostY()}).map(([,row])=>s.board.length-row)):height;
-    for(const [limit,label,enabled]of [[12,'고도',s.upgrades.high],[6,'저상',s.upgrades.low]])if(enabled){
-      const yy=y+(s.board.length-limit)*cell,color=label==='고도'?'#efae63':'#65ddd0';
+    for(const [limit,label,enabled]of [[12,'고층',s.upgrades.high],[6,'저층',s.upgrades.low]])if(enabled){
+      const yy=y+(s.board.length-limit)*cell,color=label==='고층'?'#efae63':'#65ddd0';
       line(x+cell*10+3,yy,x+cell*10+12,yy,color);text(`${label} ${limit}`,x+cell*10+18,yy+4,10,color);
     }
     text(`현재 높이 ${height}`,x+cell*10+18,531,10,'#94a9b3');
@@ -235,16 +310,24 @@ function frame(ms){
 }
 document.addEventListener('keydown',e=>{
   physicalKeys.add(e.code);
+  if(modalKind&&e.code==='Tab'){
+    const focusables=Array.from($('modalContent').querySelectorAll('button:not([disabled]),input,summary,[tabindex="0"]'));
+    if(focusables.length){const first=focusables[0],last=focusables.at(-1),active=document.activeElement;
+      if(e.shiftKey&&(active===first||!focusables.includes(active))){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&(active===last||!focusables.includes(active))){e.preventDefault();first.focus();}
+    }return;
+  }
   if(review.active){
     if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.code!=='Tab')e.preventDefault();
     if(review.keyDown(e.code,e))finishDeathReview();return;
   }
   if(e.target instanceof HTMLInputElement){if(e.code==='Enter'){e.preventDefault();startRun();}return;}
-  if(modalKind==='reward'&&['Digit1','Digit2','Digit3'].includes(e.code)){e.preventDefault();choose(Number(e.code.slice(-1))-1);return;}
+  if(['reward','rebuild'].includes(modalKind)&&['Digit1','Digit2','Digit3'].includes(e.code)){e.preventDefault();if(!e.repeat)choose(Number(e.code.slice(-1))-1);return;}
   if(e.code==='Escape'||e.code==='KeyP'){
     e.preventDefault();if(e.repeat)return;
     if(modalKind==='pause'||modalKind==='build'||(modalKind==='help'&&game?.state.status==='playing'))resume();
     else if(modalKind==='records'&&game?.state.status==='playing')resume();
+    else if(modalKind==='guide'){game?.state.status==='playing'?resume():closeModal();}
     else if(modalKind==='help'||modalKind==='records')closeModal();else if(!modalKind)pause();return;
   }
   if(!game||paused||modalKind||game.state.status!=='playing')return;
@@ -262,16 +345,18 @@ document.addEventListener('pointerdown',e=>{
 for(const type of ['pointerup','pointercancel'])document.addEventListener(type,e=>{physicalPointers.delete(e.pointerId);review.releasePointer(e.pointerId);},true);
 window.addEventListener('blur',()=>{clearInput();physicalKeys.clear();physicalPointers.clear();review.keys.clear();review.pointers.clear();if(game?.state.status==='playing'&&!paused&&!modalKind)pause();audio.stop();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.state.status==='playing'&&!paused&&!modalKind)pause();audio.stop();}lastTime=undefined;});
-$('startBtn').onclick=()=>startRun();$('helpBtn').onclick=showHelp;$('recordsBtn').onclick=showRecords;
+$('startBtn').onclick=()=>startRun();$('helpBtn').onclick=showHelp;$('recordsBtn').onclick=()=>showRecords();$('guideBtn').onclick=()=>showGuide('buffs');
 $('deathContinue').onclick=()=>{if(review.active&&!review.keys.size&&!review.pointers.size)finishDeathReview();};
 $('buildBtn').onclick=()=>{if(game?.state.status==='playing')showBuild();else toast('전투 중 현재 빌드를 확인할 수 있습니다.');};
 $('pauseBtn').onclick=()=>{if(game?.state.status!=='playing')return;if(paused)resume();else pause();};
 $('soundBtn').onclick=()=>{sound=!sound;audio.setEnabled(sound);writeStore('faultline.sound',sound);updateUi();};
 $('motionBtn').onclick=()=>{reduced=!reduced;writeStore('faultline.motion',reduced);updateUi();};
 $('modal').addEventListener('click',e=>{
+  const guide=e.target.closest('[data-guide]');if(guide){showGuide(guide.dataset.guide);return;}
+  const record=e.target.closest('[data-records]');if(record){showRecords(record.dataset.records);return;}
   const card=e.target.closest('[data-choice]');if(card){choose(Number(card.dataset.choice));return;}
   const button=e.target.closest('[data-ui]');if(!button)return;
-  const actions={resume,close:closeModal,build:showBuild,records:showRecords,result:showResult,retry:()=>startRun(game.seed),new:()=>startRun(''),home:goHome,abandon:()=>{modal('<p class="modal-eyebrow">ABANDON RUN</p><h2>이 런을 끝낼까요?</h2><p class="modal-copy">현재 보드와 모든 누적 선택이 사라집니다.</p><div class="modal-actions"><button class="danger" data-ui="home">런 끝내기</button><button class="primary" data-ui="resume">계속하기</button></div>','abandon',true);}};
+  const actions={resume,close:closeModal,build:showBuild,guide:()=>showGuide(),guideClose:()=>game?.state.status==='playing'?resume():closeModal(),records:()=>showRecords(),result:showResult,reroll,prepared:beginPrepared,previous:retryPrevious,retry:()=>startRun(game.seed),new:()=>startRun(''),home:goHome,abandon:()=>{modal('<p class="modal-eyebrow">ABANDON RUN</p><h2>이 런을 끝낼까요?</h2><p class="modal-copy">현재 보드와 모든 누적 선택이 사라집니다.</p><div class="modal-actions"><button class="danger" data-ui="home">런 끝내기</button><button class="primary" data-ui="resume">계속하기</button></div>','abandon',true);}};
   actions[button.dataset.ui]?.();
 });
 for(const button of document.querySelectorAll('[data-act]')){
