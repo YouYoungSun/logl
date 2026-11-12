@@ -6,8 +6,20 @@ import {DeathReview} from './death-review.mjs';
 
 const $=id=>document.getElementById(id);
 const canvas=$('gameCanvas'),ctx=canvas.getContext('2d');
-const W=1100,H=680;
-const LAYOUT={board:{x:150,y:60,cell:27},boss:{x:550,y:160,w:330,h:350}};
+let W=1060,H=800;
+let LAYOUT={width:W,height:H,portrait:false,board:{x:100,y:48,cell:34,cols:10,rows:20},boss:{x:550,y:160,w:330,h:350}};
+export function getViewLayout(viewportWidth=1100,viewportHeight=900,availableWidth=viewportWidth-62){
+  const portrait=viewportWidth<=680;
+  if(portrait){
+    const width=Math.max(250,Math.min(440,availableWidth)),cell=Math.min(28,(width-110)/10);
+    const board={x:(width-cell*10)/2,y:112,cell,cols:10,rows:20};
+    const height=board.y+cell*20+62;
+    return {width,height,cssWidth:width,cssHeight:height,portrait,board,boss:{x:8,y:3,w:64,h:64}};
+  }
+  const width=1060,height=800,fitHeight=Math.max(518,viewportHeight-188);
+  const cssWidth=Math.min(availableWidth,fitHeight*width/height);
+  return {width,height,cssWidth,cssHeight:cssWidth*height/width,portrait,board:{x:100,y:48,cell:34,cols:10,rows:20},boss:{x:550,y:160,w:330,h:350}};
+}
 const COLORS={I:'#65d8d0',J:'#739fc9',L:'#d7a56e',O:'#ddca91',S:'#88b6a4',T:'#aa97c5',Z:'#c77f82',G:'#566575'};
 const KEY='faultline.records.v2';
 const PHASE_NAMES=['','관측','붕괴','일식'];
@@ -193,7 +205,7 @@ function updateUi(){
   $('footerHint').textContent=s?`${s.mode==='assisted'?'재도전':'정규'} · SEED ${game.seed} · ${s.stats.locks} BLOCKS · ${fmtTime(s.stats.seconds)}`:'사망 후 1구역부터 또는 한 구역 전부터 재도전';
 }
 
-function text(str,x,y,size=12,color='#879ca9',align='left',mono=false){ctx.font=`${size}px ${mono?'GameMono,Consolas,monospace':'"Segoe UI","Malgun Gothic",sans-serif'}`;ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(str,x,y);}
+function text(str,x,y,size=12,color='#879ca9',align='left',mono=false){const scale=LAYOUT.cssWidth/W||1,fontSize=LAYOUT.portrait?size:Math.max(size,10/scale);ctx.font=`${fontSize}px ${mono?'GameMono,Consolas,monospace':'"Segoe UI","Malgun Gothic",sans-serif'}`;ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(str,x,y);}
 function line(x,y,x2,y2,color='#263541'){ctx.strokeStyle=color;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke();}
 function block(x,y,size,type,alpha=1,ghost=false){
   const c=COLORS[type]||'#65ddd0';ctx.save();ctx.globalAlpha=alpha;
@@ -210,22 +222,8 @@ function background(time){
   for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(460,y);ctx.lineTo(W,y);ctx.stroke();}
   ctx.save();ctx.translate(715,335);ctx.strokeStyle='#3c5a6340';for(const r of [155,205]){ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.stroke();}ctx.rotate(time*.015);for(let i=0;i<16;i++){ctx.rotate(Math.PI/8);line(195,0,202,0,'#48636b55');}ctx.restore();
 }
-function draw(state){
-  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);background(fx.time);
-  if(!state){
-    text('PROTOCOL / 10',1040,44,10,'#516876','right',true);return;
-  }
-  const s=state,b=s.boss,cfg=STAGES[s.stage-1],{x,y,cell}=LAYOUT.board;
-  if(!b||s.status==='rebuild'||s.status==='ready')return;
-  // Only the canvas scene moves; modal buttons and pointer targets stay stationary.
-  if(s.stage===10&&b.phase>=2&&s.status==='playing'&&!paused&&!reduced&&b.phaseElapsed%5<.55){
-    ctx.translate(Math.sin(b.phaseElapsed*53)*1.8,Math.cos(b.phaseElapsed*47)*1.3);
-  }
-  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x,recoilY:fx.recoil.y,flash:fx.flash,death:fx.death,reducedMotion:reduced};
-  drawBoss(ctx,opts);
-  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
-    const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
-  }
+function paintBoard(s,board){
+  const {x,y,cell}=board;
   ctx.fillStyle='#0b131e';ctx.fillRect(x,y,cell*10,cell*20);
   for(let row=0;row<20;row++)for(let col=0;col<10;col++){
     ctx.strokeStyle='#26374640';ctx.strokeRect(x+col*cell+.5,y+row*cell+.5,cell,cell);
@@ -247,20 +245,101 @@ function draw(state){
   }
   ctx.strokeStyle=s.board.slice(0,5).some(r=>r.some(Boolean))?'#b07458':'#4a636b';ctx.lineWidth=1;ctx.strokeRect(x-.5,y-.5,cell*10+1,cell*20+1);
   line(x,y-4,x+32,y-4,'#65ddd0');line(x+cell*10-32,y-4,x+cell*10,y-4,'#65ddd0');
+}
+function draw(state){
+  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+  if(LAYOUT.portrait){drawPortrait(state);return;}
+  drawDesktop(state);
+}
+function drawPortrait(s){
+  ctx.fillStyle='#0a1018';ctx.fillRect(0,0,W,H);
+  if(!s||!s.boss||s.status==='rebuild'||s.status==='ready')return;
+  const b=s.boss,cfg=STAGES[s.stage-1],board=LAYOUT.board,{x,y,cell}=board;
+  const danger=s.board.slice(0,5).some(row=>row.some(Boolean));
+  const tremor=s.stage===10&&b.phase>=2&&!paused&&!reduced&&b.phaseElapsed%5<.55;
+  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,
+    attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x*.3+(tremor?Math.sin(b.phaseElapsed*53):0),
+    recoilY:fx.recoil.y*.3,flash:fx.flash,death:fx.death,reducedMotion:reduced};
+  drawBoss(ctx,opts);
+  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){ctx.fillStyle=reduced?'#03081022':'#03081066';ctx.fillRect(4,2,72,66);}
+  fx.drawAura(ctx,LAYOUT,{combo:s.combo,danger,reducedMotion:reduced,compact:true});
+  paintBoard(s,board);
+  fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced,compact:true});
+  // Forecasts are always painted above attack particles and remain readable.
+  text(`${pad(s.stage)} / 10 · ${cfg.name}`,80,18,13,'#e0ece9');
+  text(`${Math.ceil(b.hp)} / ${b.maxHp}`,W-8,36,11,'#b8d3d2','right',true);
+  ctx.fillStyle='#23313a';ctx.fillRect(80,24,W-90,4);
+  ctx.fillStyle='#efae6366';ctx.fillRect(80,24,(W-90)*clamp(hpTrail/b.maxHp,0,1),4);
+  ctx.fillStyle=b.exposed?'#efae63':'#65ddd0';ctx.fillRect(80,24,(W-90)*clamp(b.hp/b.maxHp,0,1),4);
+  const phase=s.stage===10?`${PHASE_NAMES[b.phase]} · ${b.phase}/3`:b.armor?(b.exposed?'노출 ×1.35':'방어 ×0.65'):'직접 타격';
+  text(phase,80,53,11,b.exposed?'#efae63':'#91b1bd');
+  text(`공격 ${b.attackIndex+1}회째 · ${pad(b.remaining)}블록 뒤`,8,82,13,b.remaining<=3?'#efae63':'#c2d7dd');
+  const gx=W-92,gy=65;
+  b.holes.forEach((hole,i)=>{for(let col=0;col<10;col++){ctx.fillStyle=col===hole?'#0a1018':'#b0926e';ctx.fillRect(gx+col*8,gy+i*5,7,4);}});
+  text(`${b.holes.length}행${b.reinforcement?' · 증원 +1':''}`,W-9,104,10,b.reinforcement?'#efae63':'#9eb7c2','right');
+  let notice=b.response?`대응 ${Math.min(2,b.responseLines)}/2줄`:s.upgrades.guard?`차단 ${s.guardLeft}회`:'';
+  if(b.guardReady)notice=`차단 준비 · 2줄 이상`;
+  if(b.erosionRemaining)notice=`초반 방해 ${b.erosionRemaining}행`;
+  text(notice,8,102,10,b.guardReady?'#65ddd0':'#9ab6c1');
+  const left=x/2,right=W-x/2;
+  text('HOLD',left,y+15,9,'#9cb5bf','center',true);
+  ctx.strokeStyle='#304650';ctx.strokeRect(4,y+22,x-9,46);mini(s.held,left,y+34,8,s.canHold?1:.35);
+  if(!s.canHold)text('LOCK',left,y+83,8,'#718a95','center',true);
+  text('NEXT',right,y+15,9,'#9cb5bf','center',true);
+  const obscured=s.stage===10&&b.phase===3&&b.obscureRemaining>0;
+  s.queue.slice(0,5).forEach((type,i)=>{
+    if(obscured)text('?',right,y+46+i*44,21,'#c3b0e0','center',true);
+    else mini(type,right,y+34+i*44,8,i? .75:1);
+  });
+  if(obscured)text(`${b.obscureRemaining.toFixed(1)}초`,right,y+268,9,'#c3b0e0','center');
+  text('CHARGE',left,y+133,8,'#9db6c1','center',true);
+  for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(left-14,y+146+i*13,28,7);}
+  if(s.upgrades.guard){text('차단',left,y+235,9,'#91bbaa','center');text(`${s.guardLeft}회`,left,y+252,11,'#91bbaa','center');}
+  const top=s.board.findIndex(row=>row.some(Boolean)),height=top<0?0:20-top;
+  if(s.upgrades.high||s.upgrades.low){
+    text(`높이 ${height}`,left,y+310,9,'#a8c2cb','center');
+    for(const [limit,label,on]of [[12,'고층',s.upgrades.high],[6,'저층',s.upgrades.low]])if(on){
+      const yy=y+(20-limit)*cell;colorMarker(yy,label,limit);
+    }
+  }
+  function colorMarker(yy,label,limit){line(x-6,yy,x,yy,label==='고층'?'#efae63':'#65ddd0');text(`${label}${limit}`,x-7,yy-4,8,'#9db7c1','right');}
+  const bottom=y+20*cell;
+  fx.drawCombo(ctx,{x:W/2,y:bottom+26},{compact:true,reducedMotion:reduced});
+  if(!s.combo&&fx.comboFeedback.kind!=='ended')text(`${count(s.upgrades)}강화 · ${count(s.burdens)}부담`,W/2,bottom+28,11,'#9db7c1','center');
+  const seconds=(s.lockDelayMs/1000).toFixed(3);
+  text(s.upgrades.landing||s.burdens.rigidity?`착지 ${seconds}초`:`고정 ${b.stageLocks}`,x,bottom+54,9,'#91acb7');
+  text(b.overload?`과부하 +${b.overload}행`:`장기전 ${Math.max(0,cfg.T-b.stageLocks)}고정 전`,W-x,bottom+54,9,'#a9bbc4','right');
+}
+function drawDesktop(state){
+  background(fx.time);
+  if(!state){
+    text('PROTOCOL / 10',1040,44,10,'#516876','right',true);return;
+  }
+  const s=state,b=s.boss,cfg=STAGES[s.stage-1],{x,y,cell}=LAYOUT.board;
+  if(!b||s.status==='rebuild'||s.status==='ready')return;
+  // Only the canvas scene moves; modal buttons and pointer targets stay stationary.
+  const tremor=s.stage===10&&b.phase>=2&&s.status==='playing'&&!paused&&!reduced&&b.phaseElapsed%5<.55;
+  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x+(tremor?Math.sin(b.phaseElapsed*53)*1.8:0),recoilY:fx.recoil.y+(tremor?Math.cos(b.phaseElapsed*47)*1.3:0),flash:fx.flash,death:fx.death,reducedMotion:reduced};
+  drawBoss(ctx,opts);
+  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
+    const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
+  }
+  fx.drawAura?.(ctx,LAYOUT,{combo:s.combo,danger:s.board.slice(0,5).some(r=>r.some(Boolean)),reducedMotion:reduced});
+  paintBoard(s,LAYOUT.board);
   fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced});
   // HUD is drawn above FX, keeping forecasts and the next queue legible.
-  text(`SECTOR ${pad(s.stage)} / 10`,x,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+270,y-21,11,'#65ddd0','right');
-  text('HOLD',83,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(46,90,76,68);mini(s.held,84,113,14,s.canHold?1:.35);
-  if(!s.canHold&&s.held)text('LOCKED',84,174,8,'#6c7e89','center',true);
-  text('NEXT',84,226,9,'#708c9b','center',true);
+  text(`SECTOR ${pad(s.stage)} / 10`,x,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+cell*10,y-21,11,'#65ddd0','right');
+  text('HOLD',48,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(10,90,76,68);mini(s.held,48,113,14,s.canHold?1:.35);
+  if(!s.canHold&&s.held)text('LOCKED',48,174,8,'#6c7e89','center',true);
+  text('NEXT',48,226,9,'#708c9b','center',true);
   const obscured=s.stage===10&&b.phase===3&&b.obscureRemaining>0;
   if(obscured){
-    for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(51,240+i*53,66,39);text('?',84,267+i*53,23,'#b2a6c9','center',true);}
-    text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,84,532,9,'#c3b0e0','center',true);
-  }else s.queue.slice(0,5).forEach((t,i)=>mini(t,84,244+i*53,13,i? .65:1));
-  text('COMBO / 연쇄',x,631,9,'#688393','left',true);text(s.combo?`${s.combo}연쇄`:'—',x,654,17,s.combo?'#65ddd0':'#435966','left',true);
-  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,674,9,'#a3c9c5');
-  text('CHARGE',x+166,631,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+166+i*25,643,19,6);}
+    for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(15,240+i*53,66,39);text('?',48,267+i*53,23,'#b2a6c9','center',true);}
+    text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,48,532,9,'#c3b0e0','center',true);
+  }else s.queue.slice(0,5).forEach((t,i)=>mini(t,48,244+i*53,13,i? .65:1));
+  text('COMBO / 연쇄',x,y+cell*20+29,9,'#688393','left',true);text(s.combo?`${s.combo}연쇄`:'—',x,y+cell*20+52,17,s.combo?'#65ddd0':'#435966','left',true);
+  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,y+cell*20+70,9,'#a3c9c5');
+  text('CHARGE',x+cell*10-104,y+cell*20+29,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+cell*10-104+i*25,y+cell*20+41,19,6);}
   text(`${s.stage===10?'FINAL STRUCTURE':'HOSTILE STRUCTURE'} / ${pad(s.stage)}`,550,55,9,'#718d9b','left',true);
   text(s.stage===10?'특이점':`구조체 — ${cfg.name}`,550,88,25,'#e5eae5');
   text(`${Math.ceil(b.hp).toLocaleString()} / ${b.maxHp.toLocaleString()}`,895,85,11,'#b9cbc9','right',true);
@@ -289,12 +368,21 @@ function draw(state){
       const yy=y+(s.board.length-limit)*cell,color=label==='고층'?'#efae63':'#65ddd0';
       line(x+cell*10+3,yy,x+cell*10+12,yy,color);text(`${label} ${limit}`,x+cell*10+18,yy+4,10,color);
     }
-    text(`현재 높이 ${height}`,x+cell*10+18,531,10,'#94a9b3');
-    text(`배치 후 ${planned}`,x+cell*10+18,549,10,'#c6d8d4');
+    text(`현재 높이 ${height}`,x+cell*10+18,y+cell*20-42,10,'#94a9b3');
+    text(`배치 후 ${planned}`,x+cell*10+18,y+cell*20-24,10,'#c6d8d4');
   }
   fx.drawCombo(ctx,{x:490,y:185},{reducedMotion:reduced});
 }
-function resize(){const dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);}
+function resize(){
+  const viewportWidth=globalThis.innerWidth||1100,viewportHeight=globalThis.innerHeight||900;
+  const appWidth=document.querySelector?.('.app')?.clientWidth||Math.min(viewportWidth,1220);
+  const available=Math.max(250,appWidth-(viewportWidth<=680?18:62));
+  LAYOUT=getViewLayout(viewportWidth,viewportHeight,available);W=LAYOUT.width;H=LAYOUT.height;
+  const dpr=Math.min(2,globalThis.devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+  if(canvas.style){canvas.style.width=`${LAYOUT.cssWidth}px`;canvas.style.height=`${LAYOUT.cssHeight}px`;canvas.style.aspectRatio=`${W}/${H}`;}
+  if(canvas.parentElement?.style)canvas.parentElement.style.width=`${LAYOUT.cssWidth+2}px`;
+  canvas.setAttribute('data-layout',LAYOUT.portrait?'portrait':'desktop');
+}
 window.addEventListener('resize',resize);resize();
 function movement(dt){if(direction){dirAge+=dt;while(dirAge>=.14+dirRepeats*.045){act(direction<0?'left':'right');dirRepeats++;}}}
 function frame(ms){

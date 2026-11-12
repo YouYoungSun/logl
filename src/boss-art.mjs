@@ -148,13 +148,13 @@ export function drawBoss(ctx, opts = {}) {
     const len = Math.hypot(...part.c) || 1;
     const nx = part.c[0] / len, ny = part.c[1] / len;
     const idle = Math.sin(t * (1.45 + i * .045) + i * .83) * .004 * motion;
-    const delayedHit = hit * (.009 + (i % 3) * .002);
+    const delayedHit = hit * (i % 3===0?.025:.009) * motion;
     const breakup = dead * dead * (.28 + (i % 3) * .09);
     ctx.save();
     ctx.translate(nx * (spread + idle + breakup) + delayedHit,
                   ny * (spread + idle + breakup));
     ctx.translate(part.c[0],part.c[1]);
-    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion);
+    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion + hit*Math.sin(i*1.7)*.035*motion);
     ctx.translate(-part.c[0],-part.c[1]);
     ctx.globalAlpha *= 1 - dead;
     plate(ctx, part.p, i, hit * (i % 3 === 0 ? 1 : .65), coreTint);
@@ -166,7 +166,7 @@ export function drawBoss(ctx, opts = {}) {
   ctx.save();
   ctx.globalAlpha *= Math.max(0, 1 - dead * 1.2);
   const pulse = 1 + Math.sin(t * 3.2) * .01 * motion;
-  ctx.scale(pulse * (1 - dead * .7), pulse * (1 - dead * .7));
+  ctx.scale(pulse * (1 - dead * .7)*(1-hit*.10*motion), pulse * (1 - dead * .7)*(1-hit*.10*motion));
   const size = final ? .145 : .13;
   ctx.shadowColor = coreTint;
   ctx.shadowBlur = unit * (.035 + prepare * .025);

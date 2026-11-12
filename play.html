@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a1018">
   <meta name="description" content="줄을 지워 보스를 공격하고, 아홉 번의 선택으로 열 번째 구역을 돌파하세요.">
-  <title>FAULTLINE ver2.0.1 — 단층</title>
+  <title>FAULTLINE ver2.0.2 — 단층</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%2365ddd0' d='M8 8h32v16H24v16H8zm32 16h16v32H24V40h16z'/%3E%3C/svg%3E">
   <style>@font-face{font-family:GameMono;src:local('Cascadia Code'),local('Consolas'),local('DejaVu Sans Mono');font-display:swap}
 :root{color-scheme:dark;--bg:#0a1018;--panel:#101a25;--ink:#e7ecea;--muted:#83949f;--line:#26333f;--cyan:#65ddd0;--amber:#efae63;--red:#ed826e;font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif}
@@ -29,6 +29,21 @@
 
 /* Role labels explain why an upgrade helps before the numeric detail. */
 .ability-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px}.ability-role{display:inline-flex;align-items:center;width:max-content;padding:3px 7px;border:1px solid #4c707b;font-size:11px;font-weight:650;line-height:1.5;color:#c6dde1;background:#152b34}.role-defense{color:#b8ebc9;border-color:#4b8069;background:#16332b}.role-control{color:#d3c9f2;border-color:#74638d;background:#27243b}.guide-card>.ability-role{margin-top:12px}.build-item>.ability-role{margin-bottom:8px}.build-item strong{display:block}
+
+/* 2.0.2: the scene has separate desktop and portrait coordinates. */
+.surface{margin-left:auto;margin-right:auto;max-width:100%}
+.surface:has(.start-screen:not([hidden])){width:100%!important;min-height:590px}
+.surface:has(.start-screen:not([hidden])) canvas{width:100%!important;height:590px!important}
+@media(max-width:680px){
+ .surface:has(.start-screen:not([hidden])){min-height:440px}
+ .surface:has(.start-screen:not([hidden])) canvas{height:440px!important}
+ .app:has(.start-screen:not([hidden])) .touch-controls{display:none}
+ .app:has(.start-screen[hidden]) .game-footer{display:none}
+ .touch-controls{position:sticky;bottom:0;z-index:4;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;padding:8px 0 max(8px,env(safe-area-inset-bottom));margin:0;background:#0a1018f5;touch-action:none}
+ .touch-controls button{padding:10px 0;min-width:0;min-height:44px;font-size:12px}
+ .death-notice{position:fixed;right:10px;bottom:78px;width:min(300px,calc(100% - 20px));padding:16px;z-index:6}
+ .death-notice h2{font-size:20px}.death-notice p,.death-notice .death-hint{font-size:12px}.death-notice small{font-size:11px}.death-notice button{min-height:44px;font-size:13px}
+}
 </style>
 </head>
 <body>
@@ -52,7 +67,7 @@
         <div class="intro">
           <div class="eyebrow"><span></span> BLOCK COMBAT / ROGUELIKE</div>
           <h1>FAULT<span>LINE</span></h1>
-          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.1</span></p>
+          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.2</span></p>
           <p class="intro-copy">지운 줄이 공격이 된다.<br>아홉 번의 선택을 쌓아, 열 번째 구역을 돌파하라.</p>
           <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>03</b> 최종 페이즈</span></div>
           <div class="start-actions"><button id="startBtn" class="primary" type="button">런 시작 <span>↗</span></button><button id="helpBtn" class="secondary" type="button">조작과 규칙</button></div>
@@ -89,7 +104,7 @@ const Core=(()=>{
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 const WIDTH = 10;
 const HEIGHT = 20;
-const RULES_VERSION = '2.0.1';
+const RULES_VERSION = '2.0.2';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);
@@ -698,13 +713,13 @@ function drawBoss(ctx, opts = {}) {
     const len = Math.hypot(...part.c) || 1;
     const nx = part.c[0] / len, ny = part.c[1] / len;
     const idle = Math.sin(t * (1.45 + i * .045) + i * .83) * .004 * motion;
-    const delayedHit = hit * (.009 + (i % 3) * .002);
+    const delayedHit = hit * (i % 3===0?.025:.009) * motion;
     const breakup = dead * dead * (.28 + (i % 3) * .09);
     ctx.save();
     ctx.translate(nx * (spread + idle + breakup) + delayedHit,
                   ny * (spread + idle + breakup));
     ctx.translate(part.c[0],part.c[1]);
-    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion);
+    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion + hit*Math.sin(i*1.7)*.035*motion);
     ctx.translate(-part.c[0],-part.c[1]);
     ctx.globalAlpha *= 1 - dead;
     plate(ctx, part.p, i, hit * (i % 3 === 0 ? 1 : .65), coreTint);
@@ -716,7 +731,7 @@ function drawBoss(ctx, opts = {}) {
   ctx.save();
   ctx.globalAlpha *= Math.max(0, 1 - dead * 1.2);
   const pulse = 1 + Math.sin(t * 3.2) * .01 * motion;
-  ctx.scale(pulse * (1 - dead * .7), pulse * (1 - dead * .7));
+  ctx.scale(pulse * (1 - dead * .7)*(1-hit*.10*motion), pulse * (1 - dead * .7)*(1-hit*.10*motion));
   const size = final ? .145 : .13;
   ctx.shadowColor = coreTint;
   ctx.shadowBlur = unit * (.035 + prepare * .025);
@@ -801,7 +816,7 @@ class Effects {
           const removable=this.attacks.findIndex(a=>!a.event.killed && a.impacted);
           this.attacks.splice(removable>=0?removable:0,1);
         }
-        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1});
+        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1,lines:e.lines});
         if(e.killed && this.victoryAt===null) {
           this.victoryAt=this.time; this.readyAt=this.time+.4;
         }
@@ -848,7 +863,7 @@ class Effects {
         this.recoil.x=clamp(this.recoil.x+e.lines*.16*scale,-10,10);
         this.flash=Math.max(this.flash,clamp(.38+e.lines*.145,.4,.95));
         if(age<.42) {
-          this.audio?.play?.('hit',power);
+          this.audio?.play?.('hit',power,{lines:e.lines,combo:e.combo||1});
           this.numbers.push({value:e.damage,born:this.time,origin:a.impactPoint,large:e.lines===4});
           if(this.numbers.length>4)this.numbers.shift();
           const count=this.reducedMotion?3:5+e.lines*3;
@@ -882,6 +897,25 @@ class Effects {
     const {x,y}=position,age=Math.max(0,this.time-c.changedAt),noticeAge=this.time-c.noticeAt;
     ctx.save();ctx.globalCompositeOperation='source-over';ctx.textAlign='center';
     const label=(value,yy,size,color=CYAN)=>{ctx.fillStyle=color;ctx.font=`500 ${size}px GameMono,Consolas,monospace`;ctx.fillText(value,x,yy);};
+    if(options.compact){
+      if(c.kind==='ended'){
+        if(noticeAge<1.1){ctx.globalAlpha=clamp((1.1-noticeAge)/.4);label(`연쇄 종료 · ${c.endedCount}연쇄`,y+5,12,'#9aaeb9');}
+      }else{
+        if(c.count===1)label('연쇄 시작',y+5,13);
+        else{
+          ctx.textAlign='right';ctx.fillStyle=c.count>=6?AMBER:CYAN;
+          ctx.font=`700 ${c.count>=100?24:28}px GameMono,Consolas,monospace`;ctx.fillText(String(c.count),x-25,y+6);
+          ctx.textAlign='left';ctx.font='500 10px GameMono,Consolas,monospace';ctx.fillText('COMBO',x-15,y-5);ctx.fillText(`${c.count}연쇄`,x-15,y+10);
+          ctx.textAlign='center';ctx.fillStyle='#aac0cb';ctx.fillText(`${c.lines}줄 제거`,x+72,y+5);
+        }
+        if(c.kind==='protected'&&noticeAge<1.1)label('연쇄 보호 사용',y+26,10,AMBER);
+        else if(c.count>=6)label('연쇄 보너스 최대',y+26,10,AMBER);
+        if((c.count===3||c.count===6)&&age<.35&&!options.reducedMotion){
+          ctx.globalAlpha=(1-age/.35)*.45;ctx.strokeStyle=CYAN;ctx.lineWidth=1;ctx.strokeRect(x-108,y-20,216,42);
+        }
+      }
+      ctx.restore();return;
+    }
     if(c.kind==='ended'){
       if(noticeAge<1.1){
         ctx.globalAlpha=clamp((1.1-noticeAge)/.4);
@@ -908,13 +942,39 @@ class Effects {
     else if(c.lines)label(`${c.lines}줄 제거`,y+70,10,'#96b0be');
     ctx.restore();
   }
+  drawAura(ctx,layout,options={}) {
+    const b=layout?.board,combo=options.combo??this.comboFeedback.count;
+    if(!ctx||!b||!Number.isFinite(b.cell)||b.cell<=0||!combo||options.danger)return;
+    const width=b.cell*(b.cols||10),height=b.cell*(b.rows||20),tier=combo>=6?3:combo>=3?2:1;
+    const reduced=!!options.reducedMotion,pad=Math.min(options.compact?10:20,b.cell*.6),strength=[0,.45,.7,1][tier];
+    const sceneWidth=layout.width||1100,sceneHeight=layout.height||680;
+    ctx.save();
+    // Even-odd clipping guarantees that light and particles never cover a cell.
+    ctx.beginPath();ctx.rect(0,0,sceneWidth,sceneHeight);ctx.rect(b.x,b.y,width,height);ctx.clip('evenodd');
+    ctx.globalCompositeOperation='source-over';ctx.strokeStyle=CYAN;
+    for(const [line,alpha]of [[pad*1.8,.055],[pad*.85,.15],[2,.65]]){
+      ctx.globalAlpha=alpha*strength*(reduced?.65:1);ctx.lineWidth=line;
+      ctx.strokeRect(b.x-1,b.y-1,width+2,height+2);
+    }
+    if(!reduced){
+      const count=tier*8;
+      for(let i=0;i<count;i++){
+        const progress=(this.time*.12+rand(i+this.bossId*13))%1;
+        const right=i%2===1,xx=right?b.x+width+4+rand(i*3)*pad*.6:b.x-4-rand(i*3)*pad*.6;
+        const yy=b.y+height*(1-progress),size=1+rand(i*7)*1.3;
+        ctx.fillStyle=i%4===0?IVORY:CYAN;ctx.globalAlpha=(.22+.34*strength)*Math.sin(Math.PI*progress);
+        ctx.fillRect(xx-size/2,yy-size/2,size,size);
+      }
+    }
+    ctx.restore();
+  }
   draw(ctx,layout,target,options={}) {
     const b=layout?.board;
     if(!ctx||!b||!target)return;
     this.target={x:target.x,y:target.y};
     this.reducedMotion=!!options.reducedMotion;
     const reduced=this.reducedMotion;
-    const cell=b.cell;
+    const cell=b.cell,cols=b.cols||10,rows=b.rows||20;
     ctx.save();
     ctx.lineCap='round';
 
@@ -923,22 +983,22 @@ class Effects {
       const t=clamp((this.time-r.born)/.28);
       ctx.globalAlpha=(1-t)*.45;ctx.strokeStyle=CYAN;ctx.lineWidth=1;
       const yy=b.y+(r.row+.5)*cell+t*cell*.4;
-      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+10*cell,yy);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cols*cell,yy);ctx.stroke();
     }
     if(this.bossPulse>.015) {
       ctx.globalAlpha=this.bossPulse*.45;ctx.strokeStyle=AMBER;ctx.lineWidth=2;
-      ctx.strokeRect(b.x-3,b.y-3,cell*10+6,cell*20+6);
+      ctx.strokeRect(b.x-3,b.y-3,cell*cols+6,cell*rows+6);
     }
     if(this.guardPulse>.015){
       ctx.globalAlpha=this.guardPulse*.8;ctx.strokeStyle=CYAN;ctx.lineWidth=reduced?2:3;
-      const yy=b.y+cell*20+2;
-      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cell*10,yy);ctx.stroke();
+      const yy=b.y+cell*rows+2;
+      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cell*cols,yy);ctx.stroke();
     }
     ctx.globalCompositeOperation='lighter';
     for(const a of this.attacks.slice(-6)) {
       const e=a.event,age=this.time-a.born;
       const mean=e.rows.reduce((s,r)=>s+r.row+.5,0)/e.rows.length;
-      const emitter={x:b.x+cell*10+10,y:b.y+mean*cell};
+      const emitter={x:b.x+cell*cols+Math.min(10,cell*.38),y:b.y+mean*cell};
       const color=e.chargeUsed>0?AMBER:CYAN;
       const weight=1.25+e.lines*.62+Math.min(e.combo||1,6)*.12;
       if(age<.06) {
@@ -946,27 +1006,55 @@ class Effects {
         for(const row of e.rows) {
           const yy=b.y+(row.row+.5)*cell;
           ctx.globalAlpha=(1-u)*.48;ctx.strokeStyle=color;ctx.lineWidth=1;
-          ctx.strokeRect(b.x+1,yy-cell*.5+1,cell*10-2,cell-2);
+          ctx.strokeRect(b.x+1,yy-cell*.5+1,cell*cols-2,cell-2);
           const colors=row.colors.length?row.colors:Array(10).fill('I');
           for(let i=0;i<Math.min(10,colors.length);i++) {
             const sx=b.x+(i+.5)*cell;
             const px=mix(sx,emitter.x,gather),py=mix(yy,emitter.y,gather);
             ctx.globalAlpha=.85-u*.2;ctx.fillStyle=COLORS[colors[i]]||color;
-            const size=reduced?2:3.3-u*1.1;
+            // Keep a readable fraction of the removed tile before compression.
+            const size=reduced?Math.max(2,cell*.12):mix(cell*.62,Math.max(2.2,cell*.085),gather);
             ctx.fillRect(px-size/2,py-size/2,size,size);
           }
         }
       } else if(age<.18) {
         const raw=clamp((age-.06)/.12),u=raw*raw;
+        const above=target.y<b.y;
         const control={x:mix(emitter.x,target.x,.52),y:mix(emitter.y,target.y,.48)-(reduced?0:32)};
-        const pos=curve(emitter,control,target,u);
-        const tail=curve(emitter,control,target,Math.max(0,u-(reduced?.2:.12)));
-        ctx.globalAlpha=.28;ctx.strokeStyle=color;ctx.lineWidth=weight*4;
+        const route=t=>{
+          if(!above)return curve(emitter,control,target,t);
+          const corner={x:emitter.x,y:b.y-14};
+          return t<.64?{x:emitter.x,y:mix(emitter.y,corner.y,t/.64)}:
+            curve(corner,{x:target.x,y:corner.y},target,(t-.64)/.36);
+        };
+        const pos=route(u),tail=route(Math.max(0,u-(reduced?.2:.12)));
+        ctx.globalAlpha=.28;ctx.strokeStyle=color;ctx.lineWidth=Math.min(options.compact?12:24,weight*4);
         ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
         ctx.globalAlpha=.95;ctx.lineWidth=weight;
         ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
-        ctx.fillStyle=IVORY;const size=3+e.lines*.65;
-        ctx.fillRect(pos.x-size/2,pos.y-size/2,size,size);
+        const unit=options.compact?.65:clamp(cell/27,.8,1.4);
+        ctx.fillStyle=IVORY;
+        if(e.lines===1){
+          // A single line is a sharp dart, not a smaller version of a quad.
+          const vertical=Math.abs(pos.y-tail.y)>Math.abs(pos.x-tail.x);
+          const ww=(vertical?2.5:7.6)*unit,hh=(vertical?7.6:2.5)*unit;
+          ctx.fillRect(pos.x-ww/2,pos.y-hh/2,ww,hh);
+        }else if(e.lines<4){
+          const merge=clamp((raw-.2)/.55),count=raw<.75?e.lines:1;
+          const spread=(1-merge)*8*unit,size=mix(3.5,6,merge)*unit;
+          for(let i=0;i<count;i++){
+            const angle=(i/count)*TAU-Math.PI/2;
+            ctx.fillRect(pos.x+Math.cos(angle)*spread-size/2,pos.y+Math.sin(angle)*spread-size/2,size,size);
+          }
+        }else{
+          const size=14*unit,radius=(reduced?7:mix(14,8,raw))*unit;
+          ctx.fillRect(pos.x-size/2,pos.y-size/2,size,size);
+          for(let i=0;i<4;i++){
+            const angle=i*Math.PI/2+(reduced?Math.PI/4:raw*Math.PI*.65);
+            ctx.fillStyle=i%2?color:IVORY;
+            ctx.fillRect(pos.x+Math.cos(angle)*radius-1.8*unit,pos.y+Math.sin(angle)*radius-1.8*unit,3.6*unit,3.6*unit);
+          }
+        }
       } else if(age<.29) {
         const origin=a.impactPoint||target,t=(age-.18)/.11;
         ctx.globalAlpha=(1-t)*.7;ctx.strokeStyle=IVORY;ctx.lineWidth=1.5;
@@ -975,6 +1063,16 @@ class Effects {
         ctx.moveTo(origin.x-reach,origin.y);ctx.lineTo(origin.x+reach,origin.y);
         ctx.moveTo(origin.x,origin.y-reach*.65);ctx.lineTo(origin.x,origin.y+reach*.65);
         ctx.stroke();
+        if(e.lines>=2){
+          const radius=reach*(.6+t),sides=e.lines===4?4:e.lines;
+          ctx.globalAlpha=(1-t)*(reduced?.25:.55);ctx.strokeStyle=color;ctx.lineWidth=e.lines===4?2:1;
+          ctx.beginPath();
+          for(let i=0;i<=sides;i++){
+            const angle=i/sides*TAU-Math.PI/4,xx=origin.x+Math.cos(angle)*radius,yy=origin.y+Math.sin(angle)*radius;
+            i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);
+          }
+          ctx.stroke();
+        }
       }
     }
     for(const p of this.pool)if(p.active) {
@@ -988,9 +1086,9 @@ class Effects {
     for(const n of this.numbers) {
       const age=this.time-n.born,u=age/.55,origin=n.origin||target;
       ctx.globalAlpha=clamp((1-u)*1.8);
-      ctx.font=`600 ${n.large?24:18}px ui-monospace, monospace`;
+      ctx.font=`600 ${options.compact?(n.large?17:14):(n.large?24:18)}px ui-monospace, monospace`;
       ctx.fillStyle=n.large?AMBER:IVORY;
-      ctx.fillText(`−${n.value}`,origin.x+15,origin.y-45-age*(reduced?18:48));
+      ctx.fillText(`−${n.value}`,origin.x+(options.compact?0:15),options.compact?Math.max(16,origin.y+24-age*18):origin.y-45-age*(reduced?18:48));
     }
     ctx.restore();
   }
@@ -1014,12 +1112,12 @@ class AudioDirector {
     }catch{/* Visual feedback remains available when audio is blocked. */}
   }
   setEnabled(value){this.enabled=value;if(!value)this.stop();else this.unlock();}
-  stop(){for(const v of this.voices){try{v.stop();}catch{}}this.voices=[];}
+  stop(){for(const v of this.voices){try{v.stop();}catch{}try{v._noise?.stop();}catch{}}this.voices=[];}
   play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
     this.voices=this.voices.filter(v=>!v._finished);
-    while(this.voices.length>=4){try{this.voices.shift().stop();}catch{}}
+    while(this.voices.length>=4){const old=this.voices.shift();try{old.stop();}catch{}try{old._noise?.stop();}catch{}}
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
     let duration=.06,volume=.10,from=160,to=80;
     if(kind==='clear'){
@@ -1027,16 +1125,23 @@ class AudioDirector {
       const semitones=combo>=6?7:combo>=3?4:combo>=2?2:0,ratio=2**(semitones/12);
       from=600*ratio;to=1000*ratio;duration=combo===3||combo===6?.07:.055;volume=.035;
     }
-    if(kind==='hit'){from=180-p*20;to=55;duration=.09+p*.025;volume=.12+p*.018;}
+    if(kind==='hit'){
+      const lines=Math.min(4,Math.max(1,Math.round(options.lines||1)));
+      const profiles=[null,[220,85,.085,.10],[175,62,.115,.13],[145,50,.14,.15],[110,36,.19,.18]];
+      [from,to,duration,volume]=profiles[lines];
+      // Weight comes from pitch and duration, never unbounded loudness.
+      from-=Math.min(6,Math.max(1,options.combo||1))*1.5;
+    }
     if(kind==='boss'){from=72;to=35;duration=.18;volume=.21;}
     if(kind==='lock'){from=130;to=70;duration=.035;volume=.055;}
     if(kind==='hold'){from=320;to=450;duration=.04;volume=.04;}
     o.type=kind==='clear'?'sine':'triangle';o.frequency.setValueAtTime(from,now);o.frequency.exponentialRampToValueAtTime(to,now+duration);
     g.gain.setValueAtTime(.001,now);g.gain.linearRampToValueAtTime(volume,now+.004);g.gain.exponentialRampToValueAtTime(.001,now+duration);
     o.onended=()=>{o._finished=true;o.disconnect();g.disconnect();};o.start(now);o.stop(now+duration+.01);this.voices.push(o);
-    if(kind==='hit'&&p>=1.2&&this.noise){
+    if(kind==='hit'&&(options.lines>=2||!options.lines&&p>=1.2)&&this.noise){
       const n=c.createBufferSource(),ng=c.createGain(),f=c.createBiquadFilter();n.buffer=this.noise;
-      f.type='highpass';f.frequency.value=650;ng.gain.setValueAtTime(.055,now);ng.gain.exponentialRampToValueAtTime(.001,now+.075);
+      o._noise=n;f.type=options.lines>=4?'lowpass':'highpass';f.frequency.value=options.lines>=4?1100:650;
+      ng.gain.setValueAtTime(options.lines>=4?.045:.025,now);ng.gain.exponentialRampToValueAtTime(.001,now+.075);
       n.connect(f);f.connect(ng);ng.connect(this.master);n.onended=()=>{n.disconnect();f.disconnect();ng.disconnect();};n.start(now);n.stop(now+.08);
     }
   }
@@ -1066,8 +1171,20 @@ return {DeathReview};
 
 const $=id=>document.getElementById(id);
 const canvas=$('gameCanvas'),ctx=canvas.getContext('2d');
-const W=1100,H=680;
-const LAYOUT={board:{x:150,y:60,cell:27},boss:{x:550,y:160,w:330,h:350}};
+let W=1060,H=800;
+let LAYOUT={width:W,height:H,portrait:false,board:{x:100,y:48,cell:34,cols:10,rows:20},boss:{x:550,y:160,w:330,h:350}};
+function getViewLayout(viewportWidth=1100,viewportHeight=900,availableWidth=viewportWidth-62){
+  const portrait=viewportWidth<=680;
+  if(portrait){
+    const width=Math.max(250,Math.min(440,availableWidth)),cell=Math.min(28,(width-110)/10);
+    const board={x:(width-cell*10)/2,y:112,cell,cols:10,rows:20};
+    const height=board.y+cell*20+62;
+    return {width,height,cssWidth:width,cssHeight:height,portrait,board,boss:{x:8,y:3,w:64,h:64}};
+  }
+  const width=1060,height=800,fitHeight=Math.max(518,viewportHeight-188);
+  const cssWidth=Math.min(availableWidth,fitHeight*width/height);
+  return {width,height,cssWidth,cssHeight:cssWidth*height/width,portrait,board:{x:100,y:48,cell:34,cols:10,rows:20},boss:{x:550,y:160,w:330,h:350}};
+}
 const COLORS={I:'#65d8d0',J:'#739fc9',L:'#d7a56e',O:'#ddca91',S:'#88b6a4',T:'#aa97c5',Z:'#c77f82',G:'#566575'};
 const KEY='faultline.records.v2';
 const PHASE_NAMES=['','관측','붕괴','일식'];
@@ -1253,7 +1370,7 @@ function updateUi(){
   $('footerHint').textContent=s?`${s.mode==='assisted'?'재도전':'정규'} · SEED ${game.seed} · ${s.stats.locks} BLOCKS · ${fmtTime(s.stats.seconds)}`:'사망 후 1구역부터 또는 한 구역 전부터 재도전';
 }
 
-function text(str,x,y,size=12,color='#879ca9',align='left',mono=false){ctx.font=`${size}px ${mono?'GameMono,Consolas,monospace':'"Segoe UI","Malgun Gothic",sans-serif'}`;ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(str,x,y);}
+function text(str,x,y,size=12,color='#879ca9',align='left',mono=false){const scale=LAYOUT.cssWidth/W||1,fontSize=LAYOUT.portrait?size:Math.max(size,10/scale);ctx.font=`${fontSize}px ${mono?'GameMono,Consolas,monospace':'"Segoe UI","Malgun Gothic",sans-serif'}`;ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(str,x,y);}
 function line(x,y,x2,y2,color='#263541'){ctx.strokeStyle=color;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke();}
 function block(x,y,size,type,alpha=1,ghost=false){
   const c=COLORS[type]||'#65ddd0';ctx.save();ctx.globalAlpha=alpha;
@@ -1270,22 +1387,8 @@ function background(time){
   for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(460,y);ctx.lineTo(W,y);ctx.stroke();}
   ctx.save();ctx.translate(715,335);ctx.strokeStyle='#3c5a6340';for(const r of [155,205]){ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.stroke();}ctx.rotate(time*.015);for(let i=0;i<16;i++){ctx.rotate(Math.PI/8);line(195,0,202,0,'#48636b55');}ctx.restore();
 }
-function draw(state){
-  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);background(fx.time);
-  if(!state){
-    text('PROTOCOL / 10',1040,44,10,'#516876','right',true);return;
-  }
-  const s=state,b=s.boss,cfg=STAGES[s.stage-1],{x,y,cell}=LAYOUT.board;
-  if(!b||s.status==='rebuild'||s.status==='ready')return;
-  // Only the canvas scene moves; modal buttons and pointer targets stay stationary.
-  if(s.stage===10&&b.phase>=2&&s.status==='playing'&&!paused&&!reduced&&b.phaseElapsed%5<.55){
-    ctx.translate(Math.sin(b.phaseElapsed*53)*1.8,Math.cos(b.phaseElapsed*47)*1.3);
-  }
-  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x,recoilY:fx.recoil.y,flash:fx.flash,death:fx.death,reducedMotion:reduced};
-  drawBoss(ctx,opts);
-  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
-    const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
-  }
+function paintBoard(s,board){
+  const {x,y,cell}=board;
   ctx.fillStyle='#0b131e';ctx.fillRect(x,y,cell*10,cell*20);
   for(let row=0;row<20;row++)for(let col=0;col<10;col++){
     ctx.strokeStyle='#26374640';ctx.strokeRect(x+col*cell+.5,y+row*cell+.5,cell,cell);
@@ -1307,20 +1410,101 @@ function draw(state){
   }
   ctx.strokeStyle=s.board.slice(0,5).some(r=>r.some(Boolean))?'#b07458':'#4a636b';ctx.lineWidth=1;ctx.strokeRect(x-.5,y-.5,cell*10+1,cell*20+1);
   line(x,y-4,x+32,y-4,'#65ddd0');line(x+cell*10-32,y-4,x+cell*10,y-4,'#65ddd0');
+}
+function draw(state){
+  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+  if(LAYOUT.portrait){drawPortrait(state);return;}
+  drawDesktop(state);
+}
+function drawPortrait(s){
+  ctx.fillStyle='#0a1018';ctx.fillRect(0,0,W,H);
+  if(!s||!s.boss||s.status==='rebuild'||s.status==='ready')return;
+  const b=s.boss,cfg=STAGES[s.stage-1],board=LAYOUT.board,{x,y,cell}=board;
+  const danger=s.board.slice(0,5).some(row=>row.some(Boolean));
+  const tremor=s.stage===10&&b.phase>=2&&!paused&&!reduced&&b.phaseElapsed%5<.55;
+  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,
+    attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x*.3+(tremor?Math.sin(b.phaseElapsed*53):0),
+    recoilY:fx.recoil.y*.3,flash:fx.flash,death:fx.death,reducedMotion:reduced};
+  drawBoss(ctx,opts);
+  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){ctx.fillStyle=reduced?'#03081022':'#03081066';ctx.fillRect(4,2,72,66);}
+  fx.drawAura(ctx,LAYOUT,{combo:s.combo,danger,reducedMotion:reduced,compact:true});
+  paintBoard(s,board);
+  fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced,compact:true});
+  // Forecasts are always painted above attack particles and remain readable.
+  text(`${pad(s.stage)} / 10 · ${cfg.name}`,80,18,13,'#e0ece9');
+  text(`${Math.ceil(b.hp)} / ${b.maxHp}`,W-8,36,11,'#b8d3d2','right',true);
+  ctx.fillStyle='#23313a';ctx.fillRect(80,24,W-90,4);
+  ctx.fillStyle='#efae6366';ctx.fillRect(80,24,(W-90)*clamp(hpTrail/b.maxHp,0,1),4);
+  ctx.fillStyle=b.exposed?'#efae63':'#65ddd0';ctx.fillRect(80,24,(W-90)*clamp(b.hp/b.maxHp,0,1),4);
+  const phase=s.stage===10?`${PHASE_NAMES[b.phase]} · ${b.phase}/3`:b.armor?(b.exposed?'노출 ×1.35':'방어 ×0.65'):'직접 타격';
+  text(phase,80,53,11,b.exposed?'#efae63':'#91b1bd');
+  text(`공격 ${b.attackIndex+1}회째 · ${pad(b.remaining)}블록 뒤`,8,82,13,b.remaining<=3?'#efae63':'#c2d7dd');
+  const gx=W-92,gy=65;
+  b.holes.forEach((hole,i)=>{for(let col=0;col<10;col++){ctx.fillStyle=col===hole?'#0a1018':'#b0926e';ctx.fillRect(gx+col*8,gy+i*5,7,4);}});
+  text(`${b.holes.length}행${b.reinforcement?' · 증원 +1':''}`,W-9,104,10,b.reinforcement?'#efae63':'#9eb7c2','right');
+  let notice=b.response?`대응 ${Math.min(2,b.responseLines)}/2줄`:s.upgrades.guard?`차단 ${s.guardLeft}회`:'';
+  if(b.guardReady)notice=`차단 준비 · 2줄 이상`;
+  if(b.erosionRemaining)notice=`초반 방해 ${b.erosionRemaining}행`;
+  text(notice,8,102,10,b.guardReady?'#65ddd0':'#9ab6c1');
+  const left=x/2,right=W-x/2;
+  text('HOLD',left,y+15,9,'#9cb5bf','center',true);
+  ctx.strokeStyle='#304650';ctx.strokeRect(4,y+22,x-9,46);mini(s.held,left,y+34,8,s.canHold?1:.35);
+  if(!s.canHold)text('LOCK',left,y+83,8,'#718a95','center',true);
+  text('NEXT',right,y+15,9,'#9cb5bf','center',true);
+  const obscured=s.stage===10&&b.phase===3&&b.obscureRemaining>0;
+  s.queue.slice(0,5).forEach((type,i)=>{
+    if(obscured)text('?',right,y+46+i*44,21,'#c3b0e0','center',true);
+    else mini(type,right,y+34+i*44,8,i? .75:1);
+  });
+  if(obscured)text(`${b.obscureRemaining.toFixed(1)}초`,right,y+268,9,'#c3b0e0','center');
+  text('CHARGE',left,y+133,8,'#9db6c1','center',true);
+  for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(left-14,y+146+i*13,28,7);}
+  if(s.upgrades.guard){text('차단',left,y+235,9,'#91bbaa','center');text(`${s.guardLeft}회`,left,y+252,11,'#91bbaa','center');}
+  const top=s.board.findIndex(row=>row.some(Boolean)),height=top<0?0:20-top;
+  if(s.upgrades.high||s.upgrades.low){
+    text(`높이 ${height}`,left,y+310,9,'#a8c2cb','center');
+    for(const [limit,label,on]of [[12,'고층',s.upgrades.high],[6,'저층',s.upgrades.low]])if(on){
+      const yy=y+(20-limit)*cell;colorMarker(yy,label,limit);
+    }
+  }
+  function colorMarker(yy,label,limit){line(x-6,yy,x,yy,label==='고층'?'#efae63':'#65ddd0');text(`${label}${limit}`,x-7,yy-4,8,'#9db7c1','right');}
+  const bottom=y+20*cell;
+  fx.drawCombo(ctx,{x:W/2,y:bottom+26},{compact:true,reducedMotion:reduced});
+  if(!s.combo&&fx.comboFeedback.kind!=='ended')text(`${count(s.upgrades)}강화 · ${count(s.burdens)}부담`,W/2,bottom+28,11,'#9db7c1','center');
+  const seconds=(s.lockDelayMs/1000).toFixed(3);
+  text(s.upgrades.landing||s.burdens.rigidity?`착지 ${seconds}초`:`고정 ${b.stageLocks}`,x,bottom+54,9,'#91acb7');
+  text(b.overload?`과부하 +${b.overload}행`:`장기전 ${Math.max(0,cfg.T-b.stageLocks)}고정 전`,W-x,bottom+54,9,'#a9bbc4','right');
+}
+function drawDesktop(state){
+  background(fx.time);
+  if(!state){
+    text('PROTOCOL / 10',1040,44,10,'#516876','right',true);return;
+  }
+  const s=state,b=s.boss,cfg=STAGES[s.stage-1],{x,y,cell}=LAYOUT.board;
+  if(!b||s.status==='rebuild'||s.status==='ready')return;
+  // Only the canvas scene moves; modal buttons and pointer targets stay stationary.
+  const tremor=s.stage===10&&b.phase>=2&&s.status==='playing'&&!paused&&!reduced&&b.phaseElapsed%5<.55;
+  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x+(tremor?Math.sin(b.phaseElapsed*53)*1.8:0),recoilY:fx.recoil.y+(tremor?Math.cos(b.phaseElapsed*47)*1.3:0),flash:fx.flash,death:fx.death,reducedMotion:reduced};
+  drawBoss(ctx,opts);
+  if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
+    const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
+  }
+  fx.drawAura?.(ctx,LAYOUT,{combo:s.combo,danger:s.board.slice(0,5).some(r=>r.some(Boolean)),reducedMotion:reduced});
+  paintBoard(s,LAYOUT.board);
   fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced});
   // HUD is drawn above FX, keeping forecasts and the next queue legible.
-  text(`SECTOR ${pad(s.stage)} / 10`,x,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+270,y-21,11,'#65ddd0','right');
-  text('HOLD',83,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(46,90,76,68);mini(s.held,84,113,14,s.canHold?1:.35);
-  if(!s.canHold&&s.held)text('LOCKED',84,174,8,'#6c7e89','center',true);
-  text('NEXT',84,226,9,'#708c9b','center',true);
+  text(`SECTOR ${pad(s.stage)} / 10`,x,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+cell*10,y-21,11,'#65ddd0','right');
+  text('HOLD',48,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(10,90,76,68);mini(s.held,48,113,14,s.canHold?1:.35);
+  if(!s.canHold&&s.held)text('LOCKED',48,174,8,'#6c7e89','center',true);
+  text('NEXT',48,226,9,'#708c9b','center',true);
   const obscured=s.stage===10&&b.phase===3&&b.obscureRemaining>0;
   if(obscured){
-    for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(51,240+i*53,66,39);text('?',84,267+i*53,23,'#b2a6c9','center',true);}
-    text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,84,532,9,'#c3b0e0','center',true);
-  }else s.queue.slice(0,5).forEach((t,i)=>mini(t,84,244+i*53,13,i? .65:1));
-  text('COMBO / 연쇄',x,631,9,'#688393','left',true);text(s.combo?`${s.combo}연쇄`:'—',x,654,17,s.combo?'#65ddd0':'#435966','left',true);
-  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,674,9,'#a3c9c5');
-  text('CHARGE',x+166,631,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+166+i*25,643,19,6);}
+    for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(15,240+i*53,66,39);text('?',48,267+i*53,23,'#b2a6c9','center',true);}
+    text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,48,532,9,'#c3b0e0','center',true);
+  }else s.queue.slice(0,5).forEach((t,i)=>mini(t,48,244+i*53,13,i? .65:1));
+  text('COMBO / 연쇄',x,y+cell*20+29,9,'#688393','left',true);text(s.combo?`${s.combo}연쇄`:'—',x,y+cell*20+52,17,s.combo?'#65ddd0':'#435966','left',true);
+  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,y+cell*20+70,9,'#a3c9c5');
+  text('CHARGE',x+cell*10-104,y+cell*20+29,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+cell*10-104+i*25,y+cell*20+41,19,6);}
   text(`${s.stage===10?'FINAL STRUCTURE':'HOSTILE STRUCTURE'} / ${pad(s.stage)}`,550,55,9,'#718d9b','left',true);
   text(s.stage===10?'특이점':`구조체 — ${cfg.name}`,550,88,25,'#e5eae5');
   text(`${Math.ceil(b.hp).toLocaleString()} / ${b.maxHp.toLocaleString()}`,895,85,11,'#b9cbc9','right',true);
@@ -1349,12 +1533,21 @@ function draw(state){
       const yy=y+(s.board.length-limit)*cell,color=label==='고층'?'#efae63':'#65ddd0';
       line(x+cell*10+3,yy,x+cell*10+12,yy,color);text(`${label} ${limit}`,x+cell*10+18,yy+4,10,color);
     }
-    text(`현재 높이 ${height}`,x+cell*10+18,531,10,'#94a9b3');
-    text(`배치 후 ${planned}`,x+cell*10+18,549,10,'#c6d8d4');
+    text(`현재 높이 ${height}`,x+cell*10+18,y+cell*20-42,10,'#94a9b3');
+    text(`배치 후 ${planned}`,x+cell*10+18,y+cell*20-24,10,'#c6d8d4');
   }
   fx.drawCombo(ctx,{x:490,y:185},{reducedMotion:reduced});
 }
-function resize(){const dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);}
+function resize(){
+  const viewportWidth=globalThis.innerWidth||1100,viewportHeight=globalThis.innerHeight||900;
+  const appWidth=document.querySelector?.('.app')?.clientWidth||Math.min(viewportWidth,1220);
+  const available=Math.max(250,appWidth-(viewportWidth<=680?18:62));
+  LAYOUT=getViewLayout(viewportWidth,viewportHeight,available);W=LAYOUT.width;H=LAYOUT.height;
+  const dpr=Math.min(2,globalThis.devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+  if(canvas.style){canvas.style.width=`${LAYOUT.cssWidth}px`;canvas.style.height=`${LAYOUT.cssHeight}px`;canvas.style.aspectRatio=`${W}/${H}`;}
+  if(canvas.parentElement?.style)canvas.parentElement.style.width=`${LAYOUT.cssWidth+2}px`;
+  canvas.setAttribute('data-layout',LAYOUT.portrait?'portrait':'desktop');
+}
 window.addEventListener('resize',resize);resize();
 function movement(dt){if(direction){dirAge+=dt;while(dirAge>=.14+dirRepeats*.045){act(direction<0?'left':'right');dirRepeats++;}}}
 function frame(ms){

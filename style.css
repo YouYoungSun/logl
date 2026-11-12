@@ -20,3 +20,18 @@
 
 /* Role labels explain why an upgrade helps before the numeric detail. */
 .ability-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px}.ability-role{display:inline-flex;align-items:center;width:max-content;padding:3px 7px;border:1px solid #4c707b;font-size:11px;font-weight:650;line-height:1.5;color:#c6dde1;background:#152b34}.role-defense{color:#b8ebc9;border-color:#4b8069;background:#16332b}.role-control{color:#d3c9f2;border-color:#74638d;background:#27243b}.guide-card>.ability-role{margin-top:12px}.build-item>.ability-role{margin-bottom:8px}.build-item strong{display:block}
+
+/* 2.0.2: the scene has separate desktop and portrait coordinates. */
+.surface{margin-left:auto;margin-right:auto;max-width:100%}
+.surface:has(.start-screen:not([hidden])){width:100%!important;min-height:590px}
+.surface:has(.start-screen:not([hidden])) canvas{width:100%!important;height:590px!important}
+@media(max-width:680px){
+ .surface:has(.start-screen:not([hidden])){min-height:440px}
+ .surface:has(.start-screen:not([hidden])) canvas{height:440px!important}
+ .app:has(.start-screen:not([hidden])) .touch-controls{display:none}
+ .app:has(.start-screen[hidden]) .game-footer{display:none}
+ .touch-controls{position:sticky;bottom:0;z-index:4;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;padding:8px 0 max(8px,env(safe-area-inset-bottom));margin:0;background:#0a1018f5;touch-action:none}
+ .touch-controls button{padding:10px 0;min-width:0;min-height:44px;font-size:12px}
+ .death-notice{position:fixed;right:10px;bottom:78px;width:min(300px,calc(100% - 20px));padding:16px;z-index:6}
+ .death-notice h2{font-size:20px}.death-notice p,.death-notice .death-hint{font-size:12px}.death-notice small{font-size:11px}.death-notice button{min-height:44px;font-size:13px}
+}

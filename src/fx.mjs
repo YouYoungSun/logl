@@ -50,7 +50,7 @@ export class Effects {
           const removable=this.attacks.findIndex(a=>!a.event.killed && a.impacted);
           this.attacks.splice(removable>=0?removable:0,1);
         }
-        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1});
+        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1,lines:e.lines});
         if(e.killed && this.victoryAt===null) {
           this.victoryAt=this.time; this.readyAt=this.time+.4;
         }
@@ -97,7 +97,7 @@ export class Effects {
         this.recoil.x=clamp(this.recoil.x+e.lines*.16*scale,-10,10);
         this.flash=Math.max(this.flash,clamp(.38+e.lines*.145,.4,.95));
         if(age<.42) {
-          this.audio?.play?.('hit',power);
+          this.audio?.play?.('hit',power,{lines:e.lines,combo:e.combo||1});
           this.numbers.push({value:e.damage,born:this.time,origin:a.impactPoint,large:e.lines===4});
           if(this.numbers.length>4)this.numbers.shift();
           const count=this.reducedMotion?3:5+e.lines*3;
@@ -131,6 +131,25 @@ export class Effects {
     const {x,y}=position,age=Math.max(0,this.time-c.changedAt),noticeAge=this.time-c.noticeAt;
     ctx.save();ctx.globalCompositeOperation='source-over';ctx.textAlign='center';
     const label=(value,yy,size,color=CYAN)=>{ctx.fillStyle=color;ctx.font=`500 ${size}px GameMono,Consolas,monospace`;ctx.fillText(value,x,yy);};
+    if(options.compact){
+      if(c.kind==='ended'){
+        if(noticeAge<1.1){ctx.globalAlpha=clamp((1.1-noticeAge)/.4);label(`연쇄 종료 · ${c.endedCount}연쇄`,y+5,12,'#9aaeb9');}
+      }else{
+        if(c.count===1)label('연쇄 시작',y+5,13);
+        else{
+          ctx.textAlign='right';ctx.fillStyle=c.count>=6?AMBER:CYAN;
+          ctx.font=`700 ${c.count>=100?24:28}px GameMono,Consolas,monospace`;ctx.fillText(String(c.count),x-25,y+6);
+          ctx.textAlign='left';ctx.font='500 10px GameMono,Consolas,monospace';ctx.fillText('COMBO',x-15,y-5);ctx.fillText(`${c.count}연쇄`,x-15,y+10);
+          ctx.textAlign='center';ctx.fillStyle='#aac0cb';ctx.fillText(`${c.lines}줄 제거`,x+72,y+5);
+        }
+        if(c.kind==='protected'&&noticeAge<1.1)label('연쇄 보호 사용',y+26,10,AMBER);
+        else if(c.count>=6)label('연쇄 보너스 최대',y+26,10,AMBER);
+        if((c.count===3||c.count===6)&&age<.35&&!options.reducedMotion){
+          ctx.globalAlpha=(1-age/.35)*.45;ctx.strokeStyle=CYAN;ctx.lineWidth=1;ctx.strokeRect(x-108,y-20,216,42);
+        }
+      }
+      ctx.restore();return;
+    }
     if(c.kind==='ended'){
       if(noticeAge<1.1){
         ctx.globalAlpha=clamp((1.1-noticeAge)/.4);
@@ -157,13 +176,39 @@ export class Effects {
     else if(c.lines)label(`${c.lines}줄 제거`,y+70,10,'#96b0be');
     ctx.restore();
   }
+  drawAura(ctx,layout,options={}) {
+    const b=layout?.board,combo=options.combo??this.comboFeedback.count;
+    if(!ctx||!b||!Number.isFinite(b.cell)||b.cell<=0||!combo||options.danger)return;
+    const width=b.cell*(b.cols||10),height=b.cell*(b.rows||20),tier=combo>=6?3:combo>=3?2:1;
+    const reduced=!!options.reducedMotion,pad=Math.min(options.compact?10:20,b.cell*.6),strength=[0,.45,.7,1][tier];
+    const sceneWidth=layout.width||1100,sceneHeight=layout.height||680;
+    ctx.save();
+    // Even-odd clipping guarantees that light and particles never cover a cell.
+    ctx.beginPath();ctx.rect(0,0,sceneWidth,sceneHeight);ctx.rect(b.x,b.y,width,height);ctx.clip('evenodd');
+    ctx.globalCompositeOperation='source-over';ctx.strokeStyle=CYAN;
+    for(const [line,alpha]of [[pad*1.8,.055],[pad*.85,.15],[2,.65]]){
+      ctx.globalAlpha=alpha*strength*(reduced?.65:1);ctx.lineWidth=line;
+      ctx.strokeRect(b.x-1,b.y-1,width+2,height+2);
+    }
+    if(!reduced){
+      const count=tier*8;
+      for(let i=0;i<count;i++){
+        const progress=(this.time*.12+rand(i+this.bossId*13))%1;
+        const right=i%2===1,xx=right?b.x+width+4+rand(i*3)*pad*.6:b.x-4-rand(i*3)*pad*.6;
+        const yy=b.y+height*(1-progress),size=1+rand(i*7)*1.3;
+        ctx.fillStyle=i%4===0?IVORY:CYAN;ctx.globalAlpha=(.22+.34*strength)*Math.sin(Math.PI*progress);
+        ctx.fillRect(xx-size/2,yy-size/2,size,size);
+      }
+    }
+    ctx.restore();
+  }
   draw(ctx,layout,target,options={}) {
     const b=layout?.board;
     if(!ctx||!b||!target)return;
     this.target={x:target.x,y:target.y};
     this.reducedMotion=!!options.reducedMotion;
     const reduced=this.reducedMotion;
-    const cell=b.cell;
+    const cell=b.cell,cols=b.cols||10,rows=b.rows||20;
     ctx.save();
     ctx.lineCap='round';
 
@@ -172,22 +217,22 @@ export class Effects {
       const t=clamp((this.time-r.born)/.28);
       ctx.globalAlpha=(1-t)*.45;ctx.strokeStyle=CYAN;ctx.lineWidth=1;
       const yy=b.y+(r.row+.5)*cell+t*cell*.4;
-      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+10*cell,yy);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cols*cell,yy);ctx.stroke();
     }
     if(this.bossPulse>.015) {
       ctx.globalAlpha=this.bossPulse*.45;ctx.strokeStyle=AMBER;ctx.lineWidth=2;
-      ctx.strokeRect(b.x-3,b.y-3,cell*10+6,cell*20+6);
+      ctx.strokeRect(b.x-3,b.y-3,cell*cols+6,cell*rows+6);
     }
     if(this.guardPulse>.015){
       ctx.globalAlpha=this.guardPulse*.8;ctx.strokeStyle=CYAN;ctx.lineWidth=reduced?2:3;
-      const yy=b.y+cell*20+2;
-      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cell*10,yy);ctx.stroke();
+      const yy=b.y+cell*rows+2;
+      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cell*cols,yy);ctx.stroke();
     }
     ctx.globalCompositeOperation='lighter';
     for(const a of this.attacks.slice(-6)) {
       const e=a.event,age=this.time-a.born;
       const mean=e.rows.reduce((s,r)=>s+r.row+.5,0)/e.rows.length;
-      const emitter={x:b.x+cell*10+10,y:b.y+mean*cell};
+      const emitter={x:b.x+cell*cols+Math.min(10,cell*.38),y:b.y+mean*cell};
       const color=e.chargeUsed>0?AMBER:CYAN;
       const weight=1.25+e.lines*.62+Math.min(e.combo||1,6)*.12;
       if(age<.06) {
@@ -195,27 +240,55 @@ export class Effects {
         for(const row of e.rows) {
           const yy=b.y+(row.row+.5)*cell;
           ctx.globalAlpha=(1-u)*.48;ctx.strokeStyle=color;ctx.lineWidth=1;
-          ctx.strokeRect(b.x+1,yy-cell*.5+1,cell*10-2,cell-2);
+          ctx.strokeRect(b.x+1,yy-cell*.5+1,cell*cols-2,cell-2);
           const colors=row.colors.length?row.colors:Array(10).fill('I');
           for(let i=0;i<Math.min(10,colors.length);i++) {
             const sx=b.x+(i+.5)*cell;
             const px=mix(sx,emitter.x,gather),py=mix(yy,emitter.y,gather);
             ctx.globalAlpha=.85-u*.2;ctx.fillStyle=COLORS[colors[i]]||color;
-            const size=reduced?2:3.3-u*1.1;
+            // Keep a readable fraction of the removed tile before compression.
+            const size=reduced?Math.max(2,cell*.12):mix(cell*.62,Math.max(2.2,cell*.085),gather);
             ctx.fillRect(px-size/2,py-size/2,size,size);
           }
         }
       } else if(age<.18) {
         const raw=clamp((age-.06)/.12),u=raw*raw;
+        const above=target.y<b.y;
         const control={x:mix(emitter.x,target.x,.52),y:mix(emitter.y,target.y,.48)-(reduced?0:32)};
-        const pos=curve(emitter,control,target,u);
-        const tail=curve(emitter,control,target,Math.max(0,u-(reduced?.2:.12)));
-        ctx.globalAlpha=.28;ctx.strokeStyle=color;ctx.lineWidth=weight*4;
+        const route=t=>{
+          if(!above)return curve(emitter,control,target,t);
+          const corner={x:emitter.x,y:b.y-14};
+          return t<.64?{x:emitter.x,y:mix(emitter.y,corner.y,t/.64)}:
+            curve(corner,{x:target.x,y:corner.y},target,(t-.64)/.36);
+        };
+        const pos=route(u),tail=route(Math.max(0,u-(reduced?.2:.12)));
+        ctx.globalAlpha=.28;ctx.strokeStyle=color;ctx.lineWidth=Math.min(options.compact?12:24,weight*4);
         ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
         ctx.globalAlpha=.95;ctx.lineWidth=weight;
         ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
-        ctx.fillStyle=IVORY;const size=3+e.lines*.65;
-        ctx.fillRect(pos.x-size/2,pos.y-size/2,size,size);
+        const unit=options.compact?.65:clamp(cell/27,.8,1.4);
+        ctx.fillStyle=IVORY;
+        if(e.lines===1){
+          // A single line is a sharp dart, not a smaller version of a quad.
+          const vertical=Math.abs(pos.y-tail.y)>Math.abs(pos.x-tail.x);
+          const ww=(vertical?2.5:7.6)*unit,hh=(vertical?7.6:2.5)*unit;
+          ctx.fillRect(pos.x-ww/2,pos.y-hh/2,ww,hh);
+        }else if(e.lines<4){
+          const merge=clamp((raw-.2)/.55),count=raw<.75?e.lines:1;
+          const spread=(1-merge)*8*unit,size=mix(3.5,6,merge)*unit;
+          for(let i=0;i<count;i++){
+            const angle=(i/count)*TAU-Math.PI/2;
+            ctx.fillRect(pos.x+Math.cos(angle)*spread-size/2,pos.y+Math.sin(angle)*spread-size/2,size,size);
+          }
+        }else{
+          const size=14*unit,radius=(reduced?7:mix(14,8,raw))*unit;
+          ctx.fillRect(pos.x-size/2,pos.y-size/2,size,size);
+          for(let i=0;i<4;i++){
+            const angle=i*Math.PI/2+(reduced?Math.PI/4:raw*Math.PI*.65);
+            ctx.fillStyle=i%2?color:IVORY;
+            ctx.fillRect(pos.x+Math.cos(angle)*radius-1.8*unit,pos.y+Math.sin(angle)*radius-1.8*unit,3.6*unit,3.6*unit);
+          }
+        }
       } else if(age<.29) {
         const origin=a.impactPoint||target,t=(age-.18)/.11;
         ctx.globalAlpha=(1-t)*.7;ctx.strokeStyle=IVORY;ctx.lineWidth=1.5;
@@ -224,6 +297,16 @@ export class Effects {
         ctx.moveTo(origin.x-reach,origin.y);ctx.lineTo(origin.x+reach,origin.y);
         ctx.moveTo(origin.x,origin.y-reach*.65);ctx.lineTo(origin.x,origin.y+reach*.65);
         ctx.stroke();
+        if(e.lines>=2){
+          const radius=reach*(.6+t),sides=e.lines===4?4:e.lines;
+          ctx.globalAlpha=(1-t)*(reduced?.25:.55);ctx.strokeStyle=color;ctx.lineWidth=e.lines===4?2:1;
+          ctx.beginPath();
+          for(let i=0;i<=sides;i++){
+            const angle=i/sides*TAU-Math.PI/4,xx=origin.x+Math.cos(angle)*radius,yy=origin.y+Math.sin(angle)*radius;
+            i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);
+          }
+          ctx.stroke();
+        }
       }
     }
     for(const p of this.pool)if(p.active) {
@@ -237,9 +320,9 @@ export class Effects {
     for(const n of this.numbers) {
       const age=this.time-n.born,u=age/.55,origin=n.origin||target;
       ctx.globalAlpha=clamp((1-u)*1.8);
-      ctx.font=`600 ${n.large?24:18}px ui-monospace, monospace`;
+      ctx.font=`600 ${options.compact?(n.large?17:14):(n.large?24:18)}px ui-monospace, monospace`;
       ctx.fillStyle=n.large?AMBER:IVORY;
-      ctx.fillText(`−${n.value}`,origin.x+15,origin.y-45-age*(reduced?18:48));
+      ctx.fillText(`−${n.value}`,origin.x+(options.compact?0:15),options.compact?Math.max(16,origin.y+24-age*18):origin.y-45-age*(reduced?18:48));
     }
     ctx.restore();
   }

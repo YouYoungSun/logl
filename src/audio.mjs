@@ -13,12 +13,12 @@ export class AudioDirector {
     }catch{/* Visual feedback remains available when audio is blocked. */}
   }
   setEnabled(value){this.enabled=value;if(!value)this.stop();else this.unlock();}
-  stop(){for(const v of this.voices){try{v.stop();}catch{}}this.voices=[];}
+  stop(){for(const v of this.voices){try{v.stop();}catch{}try{v._noise?.stop();}catch{}}this.voices=[];}
   play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
     this.voices=this.voices.filter(v=>!v._finished);
-    while(this.voices.length>=4){try{this.voices.shift().stop();}catch{}}
+    while(this.voices.length>=4){const old=this.voices.shift();try{old.stop();}catch{}try{old._noise?.stop();}catch{}}
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
     let duration=.06,volume=.10,from=160,to=80;
     if(kind==='clear'){
@@ -26,16 +26,23 @@ export class AudioDirector {
       const semitones=combo>=6?7:combo>=3?4:combo>=2?2:0,ratio=2**(semitones/12);
       from=600*ratio;to=1000*ratio;duration=combo===3||combo===6?.07:.055;volume=.035;
     }
-    if(kind==='hit'){from=180-p*20;to=55;duration=.09+p*.025;volume=.12+p*.018;}
+    if(kind==='hit'){
+      const lines=Math.min(4,Math.max(1,Math.round(options.lines||1)));
+      const profiles=[null,[220,85,.085,.10],[175,62,.115,.13],[145,50,.14,.15],[110,36,.19,.18]];
+      [from,to,duration,volume]=profiles[lines];
+      // Weight comes from pitch and duration, never unbounded loudness.
+      from-=Math.min(6,Math.max(1,options.combo||1))*1.5;
+    }
     if(kind==='boss'){from=72;to=35;duration=.18;volume=.21;}
     if(kind==='lock'){from=130;to=70;duration=.035;volume=.055;}
     if(kind==='hold'){from=320;to=450;duration=.04;volume=.04;}
     o.type=kind==='clear'?'sine':'triangle';o.frequency.setValueAtTime(from,now);o.frequency.exponentialRampToValueAtTime(to,now+duration);
     g.gain.setValueAtTime(.001,now);g.gain.linearRampToValueAtTime(volume,now+.004);g.gain.exponentialRampToValueAtTime(.001,now+duration);
     o.onended=()=>{o._finished=true;o.disconnect();g.disconnect();};o.start(now);o.stop(now+duration+.01);this.voices.push(o);
-    if(kind==='hit'&&p>=1.2&&this.noise){
+    if(kind==='hit'&&(options.lines>=2||!options.lines&&p>=1.2)&&this.noise){
       const n=c.createBufferSource(),ng=c.createGain(),f=c.createBiquadFilter();n.buffer=this.noise;
-      f.type='highpass';f.frequency.value=650;ng.gain.setValueAtTime(.055,now);ng.gain.exponentialRampToValueAtTime(.001,now+.075);
+      o._noise=n;f.type=options.lines>=4?'lowpass':'highpass';f.frequency.value=options.lines>=4?1100:650;
+      ng.gain.setValueAtTime(options.lines>=4?.045:.025,now);ng.gain.exponentialRampToValueAtTime(.001,now+.075);
       n.connect(f);f.connect(ng);ng.connect(this.master);n.onended=()=>{n.disconnect();f.disconnect();ng.disconnect();};n.start(now);n.stop(now+.08);
     }
   }
