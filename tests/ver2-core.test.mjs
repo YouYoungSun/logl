@@ -19,7 +19,7 @@ function assisted(seed,stage){
 }
 
 test('v2 attack bundles align every hole and independently permit repeated columns',()=>{
-  assert.equal(RULES_VERSION,'2.0.3');
+  assert.equal(RULES_VERSION,'2.0.4');
   for(let stage=1;stage<=10;stage++){
     const g=new Game('aligned');g.state.stage=stage;g._beginStage();
     const samples=[.21,.21,.91];g._garbage=()=>samples.shift();

@@ -1,4 +1,5 @@
 const TAU = Math.PI * 2;
+export const PC_ATTACK_TIMING=Object.freeze({gather:.045,launch:.045,impact:.18,settle:.5,complete:.95,killComplete:1.12});
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const mix = (a, b, t) => a + (b - a) * t;
 const COLORS = { I:'#65ddd0', J:'#7f9dc9', L:'#efae63', O:'#dacd89', S:'#8eb6a0', T:'#ab9dbd', Z:'#ce8d88', G:'#81919c' };
@@ -32,13 +33,18 @@ export class Effects {
     this.bossId=bossId; this.time=0; this.lastSeq=-1;
     this.recoil={x:0,y:0}; this.velocity={x:0,y:0};
     this.flash=0; this.death=0; this.victoryAt=null; this.readyAt=null;
-    this.attacks=[]; this.repairs=[]; this.numbers=[];
+    this.attacks=[]; this.repairs=[]; this.numbers=[];this.impacts=[];
     this.bossPulse=0; this.guardPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
     this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
     this.momentumFeedback={value:0,tier:0,changedAt:-Infinity,reason:'',style:'standard'};this.displayMomentumTier=0;
-    this.compact=false;this.particleLimit=240;
+    this.compact=this.compact||false;this.particleLimit=this.compact?120:240;
     for(const p of this.pool)p.active=false;
   }
+  setPresentationMode(compact){
+    this._setMode(compact);this.pcPresentation=!compact;this.audio?.setPresentationMode?.(compact);
+    if(this.victoryAt!==null)this.readyAt=this.victoryAt+(this.pcPresentation?PC_ATTACK_TIMING.killComplete:.4);
+  }
+  drainImpacts(){const impacts=this.impacts;this.impacts=[];return impacts;}
   consume(events) {
     if(!Array.isArray(events))return;
     for(const e of events) {
@@ -56,14 +62,15 @@ export class Effects {
           const removable=this.attacks.findIndex(a=>!a.event.killed && a.impacted);
           this.attacks.splice(removable>=0?removable:0,1);
         }
-        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1,lines:e.lines,momentumTier:copy.effectTier});
+        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1,lines:e.lines,momentumTier:copy.effectTier,presentation:this.pcPresentation?'pc':'legacy'});
         if(e.killed && this.victoryAt===null) {
-          this.victoryAt=this.time; this.readyAt=this.time+.4;
+          this.victoryAt=this.time; this.readyAt=this.time+(this.pcPresentation?PC_ATTACK_TIMING.killComplete:.4);
         }
       } else if(e.type==='momentumUp') {
         const value=Number.isSafeInteger(e.value)&&e.value>=0?e.value:0,tier=clamp(Math.floor(e.tier??momentumTier(value)),0,4);
         const promoted=tier>Math.max(this.momentumFeedback.tier,this.displayMomentumTier);
         this.momentumFeedback={value,tier,changedAt:promoted?this.time:this.momentumFeedback.changedAt,reason:e.reason||'',style:e.style||'standard'};
+        if(this.pcPresentation&&(promoted||value>12&&(value-12)%4===0))this.audio?.play?.(promoted?'momentum':'discharge',1,{momentumTier:tier,presentation:'pc'});
       } else if(e.type==='momentumStyle') {
         this.momentumFeedback={...this.momentumFeedback,reason:e.reason||'',style:e.style||'standard'};
         const pending=this.attacks.findLast(a=>!a.impacted&&a.event.momentum===e.value);
@@ -102,6 +109,8 @@ export class Effects {
       const age=this.time-a.born;
       if(!a.impacted && age>=.18) {
         a.impacted=true;
+        this.impacts.push({id:a.event.seq,bossId:this.bossId,hpBefore:a.event.hpBefore,hpAfter:a.event.hpAfter,killed:!!a.event.killed,at:a.born+PC_ATTACK_TIMING.impact});
+        if(this.impacts.length>64)this.impacts.shift();
         a.impactPoint=this.target?{...this.target}:null;
         const e=a.event,tier=e.effectTier||0;
         const power=clamp(.45+.24*e.lines+.035*Math.min(e.combo||1,6),.65,1.55);
@@ -112,7 +121,7 @@ export class Effects {
         this.recoil.x=clamp(this.recoil.x+e.lines*.16*scale,-10,10);
         this.flash=Math.max(this.flash,clamp(.38+e.lines*.145,.4,.95));
         if(age<.42) {
-          this.audio?.play?.('hit',power,{lines:e.lines,combo:e.combo||1,momentumTier:tier});
+          this.audio?.play?.('hit',power,{lines:e.lines,combo:e.combo||1,momentumTier:tier,presentation:this.pcPresentation?'pc':'legacy'});
           this.numbers.push({value:e.damage,born:this.time,origin:a.impactPoint,large:e.lines===4});
           if(this.numbers.length>4)this.numbers.shift();
           const count=this.reducedMotion?3:5+e.lines*3+tier*10;
@@ -122,10 +131,10 @@ export class Effects {
     }
     this.recoil.x=clamp(this.recoil.x,-10,10);
     this.recoil.y=clamp(this.recoil.y,-5,5);
-    this.attacks=this.attacks.filter(a=>this.time-a.born<.46 || !a.impacted);
+    this.attacks=this.attacks.filter(a=>this.time-a.born<(this.pcPresentation?PC_ATTACK_TIMING.complete:.46) || !a.impacted);
     this.repairs=this.repairs.filter(r=>this.time-r.born<.28);
     this.numbers=this.numbers.filter(n=>this.time-n.born<.55);
-    if(this.victoryAt!==null)this.death=clamp((this.time-this.victoryAt-.18)/.22);
+    if(this.victoryAt!==null)this.death=clamp((this.time-this.victoryAt-.18)/(this.pcPresentation?.77:.22));
   }
   _spark(seed,i,power,origin,tier=0,tint=AMBER) {
     let p=null;
@@ -325,6 +334,7 @@ export class Effects {
     }
     ctx.globalCompositeOperation='lighter';
     for(const a of this.attacks.slice(-6)) {
+      if(this.pcPresentation&&!options.compact)continue;
       const e=a.event,age=this.time-a.born,tier=e.effectTier||0;
       const mean=e.rows.reduce((s,r)=>s+r.row+.5,0)/e.rows.length;
       const emitter={x:b.x+cell*cols+Math.min(10,cell*.38),y:b.y+mean*cell};

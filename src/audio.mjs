@@ -1,5 +1,5 @@
 export class AudioDirector {
-  constructor(enabled=true){this.enabled=enabled;this.ctx=null;this.voices=[];}
+  constructor(enabled=true){this.enabled=enabled;this.ctx=null;this.voices=[];this.pcAudioActive=false;}
   async unlock(){
     if(!this.enabled)return;
     try{
@@ -13,14 +13,49 @@ export class AudioDirector {
     }catch{/* Visual feedback remains available when audio is blocked. */}
   }
   setEnabled(value){this.enabled=value;if(!value)this.stop();else this.unlock();}
+  setPresentationMode(compact){this.pcAudioActive=!compact;}
   stop(){for(const v of this.voices){try{v.stop();}catch{}try{v._noise?.stop();}catch{}}this.voices=[];}
+  _reserve(priority){
+    this.voices=this.voices.filter(v=>!v._finished);
+    if(this.voices.length<4)return true;
+    let index=-1;
+    for(let i=0;i<this.voices.length;i++)if((this.voices[i]._priority||0)<=priority&&(index<0||(this.voices[i]._priority||0)<(this.voices[index]._priority||0)))index=i;
+    if(index<0)return false;
+    const old=this.voices.splice(index,1)[0];try{old.stop();}catch{}try{old._noise?.stop();}catch{}return true;
+  }
+  _tone(from,to,duration,volume,type,priority=1,delay=0){
+    if(!this._reserve(priority))return;
+    const c=this.ctx,now=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();
+    o._priority=priority;o.type=type;o.connect(g);g.connect(this.master);
+    o.frequency.setValueAtTime(from,now);o.frequency.exponentialRampToValueAtTime(Math.max(20,to),now+duration);
+    g.gain.setValueAtTime(.001,now);g.gain.linearRampToValueAtTime(volume,now+.004);g.gain.exponentialRampToValueAtTime(.001,now+duration);
+    o.onended=()=>{o._finished=true;o.disconnect();g.disconnect();};o.start(now);o.stop(now+duration+.01);this.voices.push(o);
+  }
+  _pcPlay(kind,options){
+    const tier=Math.min(4,Math.max(0,options.momentumTier||0));
+    if(kind==='hit'){
+      const lines=Math.min(4,Math.max(1,Math.round(options.lines||1))),weight=lines/4;
+      // Three bounded voices: edge, mass and a quieter delayed metallic tail.
+      this._tone(780+lines*95,260,.034,.026,'triangle',3);
+      this._tone(180-lines*22-tier*3,42-lines*3,.12+weight*.12,.10+weight*.04,'triangle',3);
+      this._tone(310-lines*30,155-lines*15,.19+weight*.16,.018+weight*.012,'sine',3,.026);
+    }else if(kind==='clear'){
+      this._tone(520+tier*65,850+tier*85,.045,.027,'sine',0);
+    }else{
+      const base=kind==='discharge'?220:330+tier*55;
+      for(let i=0;i<3;i++)this._tone(base*2**(i*4/12),base*2**((i*4+1)/12),.13,.025,'sine',1,i*.055);
+    }
+  }
   play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
+    if(options.presentation)this.pcAudioActive=options.presentation==='pc';
+    if(options.presentation==='pc'&&['hit','clear','momentum','discharge'].includes(kind)){this._pcPlay(kind,options);return;}
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
     const momentumTier=Math.min(4,Math.max(0,options.momentumTier||0));
-    this.voices=this.voices.filter(v=>!v._finished);
-    while(this.voices.length>=4){const old=this.voices.shift();try{old.stop();}catch{}try{old._noise?.stop();}catch{}}
+    const priority=this.pcAudioActive?(kind==='hit'?3:kind==='boss'?2:0):0;
+    if(!this._reserve(priority))return;
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
+    o._priority=priority;
     let duration=.06,volume=.10,from=160,to=80;
     if(kind==='clear'){
       const combo=Math.min(6,Math.max(1,options.combo||1));

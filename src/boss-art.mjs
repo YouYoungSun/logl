@@ -88,16 +88,16 @@ export function drawBoss(ctx, opts = {}) {
     x = 0, y = 0, w = 320, h = 360, time = 0,
     phase = 1, final = false, exposed = false, attackProgress = 0,
     recoilX = 0, recoilY = 0, flash = 0, death = 0,
-    reducedMotion = false
+    reducedMotion = false,impactSplit=0,impactCompression=0,scar=0,hitStyle='standard',direction=1
   } = opts;
   const t = Number.isFinite(time) ? time : 0;
-  const dead = clamp(death), hit = clamp(flash), charge = clamp(attackProgress);
+  const dead = clamp(death), hit = clamp(flash), charge = clamp(attackProgress),split=clamp(impactSplit),mark=clamp(scar),hitDirection=direction<0?-1:1;
   const motion = reducedMotion ? .18 : 1;
   const prepare = clamp((charge - .68) / .32);
   const anchor = bossAnchor(opts);
   const coreTint = prepare > .55 ? '#ffb078' : (final && phase >= 3 ? '#ffd0a1' : '#6bede4');
   const unit = Math.min(w, h);
-  const spread = (exposed ? .035 : 0) - prepare * .018;
+  const spread = (exposed ? .035 : 0) - prepare * .018-clamp(impactCompression)*(reducedMotion?.005:.035);
 
   ctx.save();
   ctx.translate(anchor.x, anchor.y);
@@ -118,7 +118,7 @@ export function drawBoss(ctx, opts = {}) {
 
   if (final) {
     const damaged = clamp((phase - 1) / 2);
-    const opening = .018 + spread + damaged * .055 + dead * .3;
+    const opening = .018 + spread + damaged * .055 + dead * .3+split*.085;
     // A separate massive outer architecture makes the final boss unmistakable.
     ctx.save();
     ctx.scale(.9,.9);
@@ -150,17 +150,26 @@ export function drawBoss(ctx, opts = {}) {
     const idle = Math.sin(t * (1.45 + i * .045) + i * .83) * .004 * motion;
     const delayedHit = hit * (i % 3===0?.025:.009) * motion;
     const breakup = dead * dead * (.28 + (i % 3) * .09);
+    const separation=split*(reducedMotion?.035:.12)*(hitStyle==='compress'?1.4:1);
     ctx.save();
-    ctx.translate(nx * (spread + idle + breakup) + delayedHit,
-                  ny * (spread + idle + breakup));
+    ctx.translate(nx * (spread + idle + breakup+separation) + delayedHit+split*.025*hitDirection*(reducedMotion?0:1),
+                  ny * (spread + idle + breakup+separation));
     ctx.translate(part.c[0],part.c[1]);
-    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion + hit*Math.sin(i*1.7)*.035*motion);
+    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion + hit*Math.sin(i*1.7)*.035*motion+split*(i%2?-.1:.1)*(reducedMotion?0:1));
     ctx.translate(-part.c[0],-part.c[1]);
     ctx.globalAlpha *= 1 - dead;
     plate(ctx, part.p, i, hit * (i % 3 === 0 ? 1 : .65), coreTint);
     ctx.restore();
   });
   ctx.restore();
+
+  if(mark>.01&&dead<.9){
+    ctx.save();ctx.globalAlpha=mark*(reducedMotion?.4:.72);ctx.strokeStyle=hitStyle==='charge'?'#ffd5a0':'#c8fff0';ctx.lineWidth=.009;
+    for(let i=0;i<5;i++){
+      const angle=i*TAU/5+.27;
+      ctx.save();ctx.rotate(angle);ctx.beginPath();ctx.moveTo(.08,0);ctx.lineTo(.18,.025);ctx.lineTo(.235,-.014);ctx.lineTo(.34,.012);ctx.stroke();ctx.restore();
+    }ctx.restore();
+  }
 
   // Square core and its bracket are independent of the armor silhouette.
   ctx.save();

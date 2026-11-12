@@ -1,7 +1,7 @@
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 export const WIDTH = 10;
 export const HEIGHT = 20;
-export const RULES_VERSION = '2.0.3';
+export const RULES_VERSION = '2.0.4';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a1018">
   <meta name="description" content="줄을 지워 보스를 공격하고, 아홉 번의 선택으로 열 번째 구역을 돌파하세요.">
-  <title>FAULTLINE ver2.0.3 — 단층</title>
+  <title>FAULTLINE ver2.0.4 — 단층</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%2365ddd0' d='M8 8h32v16H24v16H8zm32 16h16v32H24V40h16z'/%3E%3C/svg%3E">
   <style>@font-face{font-family:GameMono;src:local('Cascadia Code'),local('Consolas'),local('DejaVu Sans Mono');font-display:swap}
 :root{color-scheme:dark;--bg:#0a1018;--panel:#101a25;--ink:#e7ecea;--muted:#83949f;--line:#26333f;--cyan:#65ddd0;--amber:#efae63;--red:#ed826e;font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif}
@@ -67,7 +67,7 @@
         <div class="intro">
           <div class="eyebrow"><span></span> BLOCK COMBAT / ROGUELIKE</div>
           <h1>FAULT<span>LINE</span></h1>
-          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.3</span></p>
+          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.4</span></p>
           <p class="intro-copy">지운 줄이 공격이 된다.<br>아홉 번의 선택을 쌓아, 열 번째 구역을 돌파하라.</p>
           <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>03</b> 최종 페이즈</span></div>
           <div class="start-actions"><button id="startBtn" class="primary" type="button">런 시작 <span>↗</span></button><button id="helpBtn" class="secondary" type="button">조작과 규칙</button></div>
@@ -104,7 +104,7 @@ const Core=(()=>{
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 const WIDTH = 10;
 const HEIGHT = 20;
-const RULES_VERSION = '2.0.3';
+const RULES_VERSION = '2.0.4';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);
@@ -678,16 +678,16 @@ function drawBoss(ctx, opts = {}) {
     x = 0, y = 0, w = 320, h = 360, time = 0,
     phase = 1, final = false, exposed = false, attackProgress = 0,
     recoilX = 0, recoilY = 0, flash = 0, death = 0,
-    reducedMotion = false
+    reducedMotion = false,impactSplit=0,impactCompression=0,scar=0,hitStyle='standard',direction=1
   } = opts;
   const t = Number.isFinite(time) ? time : 0;
-  const dead = clamp(death), hit = clamp(flash), charge = clamp(attackProgress);
+  const dead = clamp(death), hit = clamp(flash), charge = clamp(attackProgress),split=clamp(impactSplit),mark=clamp(scar),hitDirection=direction<0?-1:1;
   const motion = reducedMotion ? .18 : 1;
   const prepare = clamp((charge - .68) / .32);
   const anchor = bossAnchor(opts);
   const coreTint = prepare > .55 ? '#ffb078' : (final && phase >= 3 ? '#ffd0a1' : '#6bede4');
   const unit = Math.min(w, h);
-  const spread = (exposed ? .035 : 0) - prepare * .018;
+  const spread = (exposed ? .035 : 0) - prepare * .018-clamp(impactCompression)*(reducedMotion?.005:.035);
 
   ctx.save();
   ctx.translate(anchor.x, anchor.y);
@@ -708,7 +708,7 @@ function drawBoss(ctx, opts = {}) {
 
   if (final) {
     const damaged = clamp((phase - 1) / 2);
-    const opening = .018 + spread + damaged * .055 + dead * .3;
+    const opening = .018 + spread + damaged * .055 + dead * .3+split*.085;
     // A separate massive outer architecture makes the final boss unmistakable.
     ctx.save();
     ctx.scale(.9,.9);
@@ -740,17 +740,26 @@ function drawBoss(ctx, opts = {}) {
     const idle = Math.sin(t * (1.45 + i * .045) + i * .83) * .004 * motion;
     const delayedHit = hit * (i % 3===0?.025:.009) * motion;
     const breakup = dead * dead * (.28 + (i % 3) * .09);
+    const separation=split*(reducedMotion?.035:.12)*(hitStyle==='compress'?1.4:1);
     ctx.save();
-    ctx.translate(nx * (spread + idle + breakup) + delayedHit,
-                  ny * (spread + idle + breakup));
+    ctx.translate(nx * (spread + idle + breakup+separation) + delayedHit+split*.025*hitDirection*(reducedMotion?0:1),
+                  ny * (spread + idle + breakup+separation));
     ctx.translate(part.c[0],part.c[1]);
-    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion + hit*Math.sin(i*1.7)*.035*motion);
+    ctx.rotate(dead * (i % 2 ? -.7 : .65) + Math.sin(t * 2 + i) * .002 * motion + hit*Math.sin(i*1.7)*.035*motion+split*(i%2?-.1:.1)*(reducedMotion?0:1));
     ctx.translate(-part.c[0],-part.c[1]);
     ctx.globalAlpha *= 1 - dead;
     plate(ctx, part.p, i, hit * (i % 3 === 0 ? 1 : .65), coreTint);
     ctx.restore();
   });
   ctx.restore();
+
+  if(mark>.01&&dead<.9){
+    ctx.save();ctx.globalAlpha=mark*(reducedMotion?.4:.72);ctx.strokeStyle=hitStyle==='charge'?'#ffd5a0':'#c8fff0';ctx.lineWidth=.009;
+    for(let i=0;i<5;i++){
+      const angle=i*TAU/5+.27;
+      ctx.save();ctx.rotate(angle);ctx.beginPath();ctx.moveTo(.08,0);ctx.lineTo(.18,.025);ctx.lineTo(.235,-.014);ctx.lineTo(.34,.012);ctx.stroke();ctx.restore();
+    }ctx.restore();
+  }
 
   // Square core and its bracket are independent of the armor silhouette.
   ctx.save();
@@ -790,6 +799,7 @@ return {drawBoss,bossAnchor};
 })();
 const FX=(()=>{
 const TAU = Math.PI * 2;
+const PC_ATTACK_TIMING=Object.freeze({gather:.045,launch:.045,impact:.18,settle:.5,complete:.95,killComplete:1.12});
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const mix = (a, b, t) => a + (b - a) * t;
 const COLORS = { I:'#65ddd0', J:'#7f9dc9', L:'#efae63', O:'#dacd89', S:'#8eb6a0', T:'#ab9dbd', Z:'#ce8d88', G:'#81919c' };
@@ -823,13 +833,18 @@ class Effects {
     this.bossId=bossId; this.time=0; this.lastSeq=-1;
     this.recoil={x:0,y:0}; this.velocity={x:0,y:0};
     this.flash=0; this.death=0; this.victoryAt=null; this.readyAt=null;
-    this.attacks=[]; this.repairs=[]; this.numbers=[];
+    this.attacks=[]; this.repairs=[]; this.numbers=[];this.impacts=[];
     this.bossPulse=0; this.guardPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
     this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
     this.momentumFeedback={value:0,tier:0,changedAt:-Infinity,reason:'',style:'standard'};this.displayMomentumTier=0;
-    this.compact=false;this.particleLimit=240;
+    this.compact=this.compact||false;this.particleLimit=this.compact?120:240;
     for(const p of this.pool)p.active=false;
   }
+  setPresentationMode(compact){
+    this._setMode(compact);this.pcPresentation=!compact;this.audio?.setPresentationMode?.(compact);
+    if(this.victoryAt!==null)this.readyAt=this.victoryAt+(this.pcPresentation?PC_ATTACK_TIMING.killComplete:.4);
+  }
+  drainImpacts(){const impacts=this.impacts;this.impacts=[];return impacts;}
   consume(events) {
     if(!Array.isArray(events))return;
     for(const e of events) {
@@ -847,14 +862,15 @@ class Effects {
           const removable=this.attacks.findIndex(a=>!a.event.killed && a.impacted);
           this.attacks.splice(removable>=0?removable:0,1);
         }
-        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1,lines:e.lines,momentumTier:copy.effectTier});
+        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1,lines:e.lines,momentumTier:copy.effectTier,presentation:this.pcPresentation?'pc':'legacy'});
         if(e.killed && this.victoryAt===null) {
-          this.victoryAt=this.time; this.readyAt=this.time+.4;
+          this.victoryAt=this.time; this.readyAt=this.time+(this.pcPresentation?PC_ATTACK_TIMING.killComplete:.4);
         }
       } else if(e.type==='momentumUp') {
         const value=Number.isSafeInteger(e.value)&&e.value>=0?e.value:0,tier=clamp(Math.floor(e.tier??momentumTier(value)),0,4);
         const promoted=tier>Math.max(this.momentumFeedback.tier,this.displayMomentumTier);
         this.momentumFeedback={value,tier,changedAt:promoted?this.time:this.momentumFeedback.changedAt,reason:e.reason||'',style:e.style||'standard'};
+        if(this.pcPresentation&&(promoted||value>12&&(value-12)%4===0))this.audio?.play?.(promoted?'momentum':'discharge',1,{momentumTier:tier,presentation:'pc'});
       } else if(e.type==='momentumStyle') {
         this.momentumFeedback={...this.momentumFeedback,reason:e.reason||'',style:e.style||'standard'};
         const pending=this.attacks.findLast(a=>!a.impacted&&a.event.momentum===e.value);
@@ -893,6 +909,8 @@ class Effects {
       const age=this.time-a.born;
       if(!a.impacted && age>=.18) {
         a.impacted=true;
+        this.impacts.push({id:a.event.seq,bossId:this.bossId,hpBefore:a.event.hpBefore,hpAfter:a.event.hpAfter,killed:!!a.event.killed,at:a.born+PC_ATTACK_TIMING.impact});
+        if(this.impacts.length>64)this.impacts.shift();
         a.impactPoint=this.target?{...this.target}:null;
         const e=a.event,tier=e.effectTier||0;
         const power=clamp(.45+.24*e.lines+.035*Math.min(e.combo||1,6),.65,1.55);
@@ -903,7 +921,7 @@ class Effects {
         this.recoil.x=clamp(this.recoil.x+e.lines*.16*scale,-10,10);
         this.flash=Math.max(this.flash,clamp(.38+e.lines*.145,.4,.95));
         if(age<.42) {
-          this.audio?.play?.('hit',power,{lines:e.lines,combo:e.combo||1,momentumTier:tier});
+          this.audio?.play?.('hit',power,{lines:e.lines,combo:e.combo||1,momentumTier:tier,presentation:this.pcPresentation?'pc':'legacy'});
           this.numbers.push({value:e.damage,born:this.time,origin:a.impactPoint,large:e.lines===4});
           if(this.numbers.length>4)this.numbers.shift();
           const count=this.reducedMotion?3:5+e.lines*3+tier*10;
@@ -913,10 +931,10 @@ class Effects {
     }
     this.recoil.x=clamp(this.recoil.x,-10,10);
     this.recoil.y=clamp(this.recoil.y,-5,5);
-    this.attacks=this.attacks.filter(a=>this.time-a.born<.46 || !a.impacted);
+    this.attacks=this.attacks.filter(a=>this.time-a.born<(this.pcPresentation?PC_ATTACK_TIMING.complete:.46) || !a.impacted);
     this.repairs=this.repairs.filter(r=>this.time-r.born<.28);
     this.numbers=this.numbers.filter(n=>this.time-n.born<.55);
-    if(this.victoryAt!==null)this.death=clamp((this.time-this.victoryAt-.18)/.22);
+    if(this.victoryAt!==null)this.death=clamp((this.time-this.victoryAt-.18)/(this.pcPresentation?.77:.22));
   }
   _spark(seed,i,power,origin,tier=0,tint=AMBER) {
     let p=null;
@@ -1116,6 +1134,7 @@ class Effects {
     }
     ctx.globalCompositeOperation='lighter';
     for(const a of this.attacks.slice(-6)) {
+      if(this.pcPresentation&&!options.compact)continue;
       const e=a.event,age=this.time-a.born,tier=e.effectTier||0;
       const mean=e.rows.reduce((s,r)=>s+r.row+.5,0)/e.rows.length;
       const emitter={x:b.x+cell*cols+Math.min(10,cell*.38),y:b.y+mean*cell};
@@ -1287,7 +1306,7 @@ return {Effects};
 })();
 const Audio=(()=>{
 class AudioDirector {
-  constructor(enabled=true){this.enabled=enabled;this.ctx=null;this.voices=[];}
+  constructor(enabled=true){this.enabled=enabled;this.ctx=null;this.voices=[];this.pcAudioActive=false;}
   async unlock(){
     if(!this.enabled)return;
     try{
@@ -1301,14 +1320,49 @@ class AudioDirector {
     }catch{/* Visual feedback remains available when audio is blocked. */}
   }
   setEnabled(value){this.enabled=value;if(!value)this.stop();else this.unlock();}
+  setPresentationMode(compact){this.pcAudioActive=!compact;}
   stop(){for(const v of this.voices){try{v.stop();}catch{}try{v._noise?.stop();}catch{}}this.voices=[];}
+  _reserve(priority){
+    this.voices=this.voices.filter(v=>!v._finished);
+    if(this.voices.length<4)return true;
+    let index=-1;
+    for(let i=0;i<this.voices.length;i++)if((this.voices[i]._priority||0)<=priority&&(index<0||(this.voices[i]._priority||0)<(this.voices[index]._priority||0)))index=i;
+    if(index<0)return false;
+    const old=this.voices.splice(index,1)[0];try{old.stop();}catch{}try{old._noise?.stop();}catch{}return true;
+  }
+  _tone(from,to,duration,volume,type,priority=1,delay=0){
+    if(!this._reserve(priority))return;
+    const c=this.ctx,now=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();
+    o._priority=priority;o.type=type;o.connect(g);g.connect(this.master);
+    o.frequency.setValueAtTime(from,now);o.frequency.exponentialRampToValueAtTime(Math.max(20,to),now+duration);
+    g.gain.setValueAtTime(.001,now);g.gain.linearRampToValueAtTime(volume,now+.004);g.gain.exponentialRampToValueAtTime(.001,now+duration);
+    o.onended=()=>{o._finished=true;o.disconnect();g.disconnect();};o.start(now);o.stop(now+duration+.01);this.voices.push(o);
+  }
+  _pcPlay(kind,options){
+    const tier=Math.min(4,Math.max(0,options.momentumTier||0));
+    if(kind==='hit'){
+      const lines=Math.min(4,Math.max(1,Math.round(options.lines||1))),weight=lines/4;
+      // Three bounded voices: edge, mass and a quieter delayed metallic tail.
+      this._tone(780+lines*95,260,.034,.026,'triangle',3);
+      this._tone(180-lines*22-tier*3,42-lines*3,.12+weight*.12,.10+weight*.04,'triangle',3);
+      this._tone(310-lines*30,155-lines*15,.19+weight*.16,.018+weight*.012,'sine',3,.026);
+    }else if(kind==='clear'){
+      this._tone(520+tier*65,850+tier*85,.045,.027,'sine',0);
+    }else{
+      const base=kind==='discharge'?220:330+tier*55;
+      for(let i=0;i<3;i++)this._tone(base*2**(i*4/12),base*2**((i*4+1)/12),.13,.025,'sine',1,i*.055);
+    }
+  }
   play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
+    if(options.presentation)this.pcAudioActive=options.presentation==='pc';
+    if(options.presentation==='pc'&&['hit','clear','momentum','discharge'].includes(kind)){this._pcPlay(kind,options);return;}
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
     const momentumTier=Math.min(4,Math.max(0,options.momentumTier||0));
-    this.voices=this.voices.filter(v=>!v._finished);
-    while(this.voices.length>=4){const old=this.voices.shift();try{old.stop();}catch{}try{old._noise?.stop();}catch{}}
+    const priority=this.pcAudioActive?(kind==='hit'?3:kind==='boss'?2:0):0;
+    if(!this._reserve(priority))return;
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
+    o._priority=priority;
     let duration=.06,volume=.10,from=160,to=80;
     if(kind==='clear'){
       const combo=Math.min(6,Math.max(1,options.combo||1));
@@ -1360,7 +1414,282 @@ class DeathReview {
 
 return {DeathReview};
 })();
-(()=>{const {Game,STAGES,UPGRADES,BURDENS,cells,SHAPES,RULES_VERSION}=Core;const {drawBoss,bossAnchor}=Boss;const {Effects}=FX;const {AudioDirector}=Audio;const {DeathReview}=Review;
+const PcStage=(()=>{
+// PC presentation only. Rules, input cadence and the 180ms impact remain owned by core/FX.
+const TAU=Math.PI*2;
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const GOLD='#ffc76b',WHITE='#fff1cc',CYAN='#7deade',VIOLET='#c5a2ff';
+const COLORS=[CYAN,CYAN,'#a0dbff',VIOLET,GOLD];
+const gradientCache=new WeakMap();
+
+function polygon(ctx,cx,cy,rx,ry,sides,turn=0,inner=1){
+  ctx.beginPath();
+  for(let i=0;i<=sides;i++){
+    const a=turn+i/sides*TAU,r=i%2?inner:1;
+    const x=cx+Math.cos(a)*rx*r,y=cy+Math.sin(a)*ry*r;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }ctx.closePath();
+}
+function stroke(ctx,x,y,x2,y2){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke();}
+function tierOf(s){return clamp(Math.floor(s.momentumTier||0),0,4);}
+function buildFlags(e){
+  let flags=0;
+  const reasons=e.momentumReasons||[];
+  for(let i=0;i<Math.min(8,reasons.length);i++){
+    const r=reasons[i];
+    if(r==='고층 돌파')flags|=1;
+    else if(r==='저층 안정')flags|=2;
+    else if(r==='방해 행 복구')flags|=4;
+    else if(r==='선제 타격')flags|=8;
+  }
+  if(e.style==='guard')flags|=16;
+  return flags;
+}
+function targetOf(layout,fx,options){return options.target||fx.target||{x:layout.boss.x+layout.boss.w/2,y:layout.boss.y+layout.boss.h/2};}
+function glow(ctx,layout){
+  const b=layout.board,key=`${b.x},${b.y},${b.cell},${layout.width}`;
+  let cached=gradientCache.get(ctx);
+  if(cached?.key===key)return cached;
+  const cx=b.x+b.cell*5,cy=b.y+b.cell*10;
+  cached={key,gradients:[]};
+  for(const tint of ['#65ddd0','#a0dbff','#bd91ff','#ffc46b']){
+    const g=ctx.createRadialGradient(cx+30,cy,130,cx+30,cy,350);
+    g.addColorStop(0,tint+'b0');g.addColorStop(.52,tint+'68');g.addColorStop(1,tint+'00');
+    cached.gradients.push(g);
+  }
+  gradientCache.set(ctx,cached);return cached;
+}
+
+// This broad architectural silhouette stays visible between successful clears.
+function drawPcStage(ctx,layout,state,fx,options={}){
+  if(layout.portrait||!state?.boss)return;
+  const tier=tierOf(state),reduced=!!options.reducedMotion,b=layout.board;
+  const bx=b.x+b.cell*10,by=b.y+b.cell*20,time=Number.isFinite(fx.time)?fx.time:0;
+  const target=targetOf(layout,fx,options),danger=!!options.danger;
+  if(!tier&&!options.previewLines)return;
+  const tint=COLORS[tier],steady=danger?.42:1;
+  ctx.save();
+  // Protect NEXT/HOLD, the top boss information and the forecast column.
+  ctx.beginPath();ctx.rect(87,30,808,Math.min(720,by+18)-30);
+  ctx.rect(540,30,355,115);ctx.rect(b.x,b.y,b.cell*10,b.cell*20);ctx.clip('evenodd');
+  if(tier){
+    ctx.globalAlpha=steady*(reduced?.42:.66+(Math.sin(time*.9)*.025));
+    ctx.fillStyle=glow(ctx,layout).gradients[tier-1];ctx.fillRect(87,30,510,Math.min(720,by+18)-30);
+    // Layered slabs form a growing open gate, rather than a narrow decorative frame.
+    for(let i=0;i<tier;i++){
+      const spread=26+i*20,xx=bx+spread,top=90+i*36,bottom=by-28-i*28;
+      ctx.globalAlpha=steady*(.18+i*.035);ctx.fillStyle=tint;
+      ctx.beginPath();ctx.moveTo(bx+5,top+35);ctx.lineTo(xx,top);ctx.lineTo(xx+13,top+48);
+      ctx.lineTo(xx+13,bottom-48);ctx.lineTo(xx,bottom);ctx.lineTo(bx+5,bottom-35);ctx.closePath();ctx.fill();
+      ctx.globalAlpha=steady*(reduced?.4:.65);ctx.strokeStyle=i===tier-1?WHITE:tint;ctx.lineWidth=i===tier-1?2.2:1;
+      stroke(ctx,xx+13,top+48,xx+13,bottom-48);
+      stroke(ctx,bx+5,top+35,xx,top);stroke(ctx,xx,bottom,bx+5,bottom-35);
+    }
+    // Large diagonal faults behind the enemy communicate a persistent altered arena.
+    if(tier>=2){
+      const radius=115+tier*26;
+      ctx.globalAlpha=steady*(tier===4?.28:.18);ctx.strokeStyle=tint;ctx.lineWidth=tier===4?8:4;
+      for(let i=0;i<tier+1;i++){
+        const angle=(i/(tier+1))*TAU+.2,inner=radius*.55;
+        const sx=target.x+Math.cos(angle)*inner,sy=target.y+Math.sin(angle)*inner;
+        const mx=target.x+Math.cos(angle+.13)*radius,my=target.y+Math.sin(angle+.13)*radius;
+        ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(mx,my);
+        ctx.lineTo(mx+Math.cos(angle)*35,my+Math.sin(angle)*35);ctx.stroke();
+      }
+      ctx.globalAlpha=steady*.38;ctx.lineWidth=2;
+      polygon(ctx,target.x,target.y,radius,radius*.78,6,Math.PI/6);ctx.stroke();
+      if(tier>=3){polygon(ctx,target.x,target.y,radius+28,radius*.78+28,6,Math.PI/6);ctx.stroke();}
+    }
+    if(tier===4){
+      const charge=(Math.max(0,state.momentum-12)%4);
+      const pulse=cyclePulse(fx);
+      // Four broad capacitors visibly assemble and discharge again after OVERDRIVE.
+      for(let i=0;i<4;i++){
+        const xx=608+i*68,yy=174,filled=i<charge;
+        ctx.globalAlpha=steady*(filled?.7:.2);ctx.fillStyle=filled?GOLD:'#b48b4e';
+        ctx.beginPath();ctx.moveTo(xx-23,yy);ctx.lineTo(xx,yy-10);ctx.lineTo(xx+23,yy);
+        ctx.lineTo(xx,yy+10);ctx.closePath();ctx.fill();
+        ctx.globalAlpha=steady*.62;ctx.strokeStyle=GOLD;ctx.lineWidth=1.5;ctx.stroke();
+      }
+      if(pulse>0){
+        ctx.globalAlpha=steady*pulse*(reduced?.18:.48);ctx.strokeStyle=WHITE;ctx.lineWidth=reduced?3:10;
+        const reach=(1-pulse)*155;
+        polygon(ctx,target.x,target.y,150+reach,135+reach*.6,6,Math.PI/6);ctx.stroke();
+      }
+      // Broad rising shafts are deliberately behind the protected live board.
+      ctx.globalAlpha=steady*(reduced?.15:.21);ctx.fillStyle=GOLD;
+      for(let i=0;i<5;i++){
+        const xx=bx+5+i*17,height=70+i*25;
+        ctx.beginPath();ctx.moveTo(xx,by);ctx.lineTo(xx+19,by-height);ctx.lineTo(xx+35,by);ctx.closePath();ctx.fill();
+      }
+    }
+  }
+  if(options.previewLines===4){
+    ctx.globalAlpha=reduced?.55:.65;ctx.strokeStyle=GOLD;ctx.fillStyle='#efae6330';ctx.lineWidth=2;
+    for(let i=0;i<4;i++){
+      const xx=bx+22+i*7,yy=by-160+i*30;
+      ctx.fillRect(xx,yy,36,18);ctx.strokeRect(xx,yy,36,18);
+    }
+  }
+  ctx.restore();
+}
+
+function cyclePulse(fx){
+  const attacks=fx.attacks||[];
+  for(let i=attacks.length-1,stop=Math.max(0,attacks.length-6);i>=stop;i--){
+    const a=attacks[i],n=a.event.momentum,age=fx.time-a.born-.18;
+    if(n>12&&n%4===0&&age>=0&&age<.72)return 1-age/.72;
+  }return 0;
+}
+
+function getPcImpact(fx){
+  let split=0,scar=0,compression=0,style='standard',direction=1;
+  const attacks=fx.attacks||[];
+  for(let i=attacks.length-1,stop=Math.max(0,attacks.length-6);i>=stop;i--){
+    const a=attacks[i],e=a.event,age=fx.time-a.born;
+    if(age>=.11&&age<.18)compression=Math.max(compression,(age-.11)/.07*(e.lines===4?1:.35));
+    if(age<.18||age>.95)continue;
+    const t=age-.18,power=clamp(.25+e.lines*.16+(e.chargeUsed||0)*.035,0,1);
+    const pose=power*(t<.065?1:Math.exp(-(t-.065)*5.4));
+    if(pose>split){split=pose;style=e.style||'standard';direction=e.lines===1?-1:1;}
+    scar=Math.max(scar,power*clamp(1-t/.77));
+  }return {split,scar,style,direction,compression};
+}
+
+function drawExtraction(ctx,layout,fx,reduced){
+  const b=layout.board,bx=b.x+b.cell*10,attacks=fx.attacks||[];
+  ctx.save();ctx.beginPath();ctx.rect(bx+2,b.y,148,b.cell*20);ctx.clip();
+  for(let i=Math.max(0,attacks.length-6);i<attacks.length;i++){
+    const a=attacks[i],e=a.event,age=fx.time-a.born,rows=e.rows;
+    if(age<0||age>=.13||!rows?.length)continue;
+    const count=Math.min(4,rows.length),tier=clamp(e.effectTier??e.momentumTier??0,0,4);
+    let mean=0;for(let j=0;j<count;j++)mean+=rows[j].row+.5;mean/=count;
+    const launchY=clamp(b.y+mean*b.cell,205,490),u=clamp(age/.095),smooth=u*u*(3-2*u);
+    for(let j=0;j<count;j++){
+      const sourceY=b.y+(rows[j].row+.5)*b.cell;
+      const endY=launchY+(j-(count-1)/2)*9;
+      const xx=lerp(bx+8,580,smooth),yy=lerp(sourceY,endY,smooth);
+      const color=e.chargeUsed?GOLD:COLORS[tier];
+      // The strip starts at the actual removed-row height, outside all live cells.
+      ctx.globalAlpha=clamp((.13-age)/.05)*.8;ctx.fillStyle=color;
+      ctx.fillRect(bx+2,sourceY-b.cell*.3,8,b.cell*.6);
+      ctx.globalAlpha=(1-u*.6)*(reduced?.3:.5);ctx.strokeStyle=color;ctx.lineWidth=reduced?2:5;
+      ctx.beginPath();ctx.moveTo(bx+3,sourceY);
+      ctx.quadraticCurveTo(Math.min(584,xx+28),sourceY,xx,yy);ctx.stroke();
+      ctx.globalAlpha=clamp((.13-age)/.04)*.9;ctx.fillStyle=j%2?WHITE:color;
+      ctx.fillRect(xx-9,yy-4,18,8);
+    }
+  }ctx.restore();
+}
+
+// New PC attacks occupy the corridor and boss arena, never live cells or forecasts.
+function drawPcAttack(ctx,layout,state,fx,options={}){
+  if(layout.portrait||!state?.boss)return;
+  const b=layout.board,bx=b.x+b.cell*10,reduced=!!options.reducedMotion,target=targetOf(layout,fx,options);
+  const attacks=fx.attacks||[];
+  drawExtraction(ctx,layout,fx,reduced);
+  ctx.save();ctx.beginPath();ctx.rect(bx+12,150,Math.max(0,890-bx-12),410);ctx.clip();
+  // Work is bounded even when synthetic tests supply hundreds of simultaneous events.
+  for(let i=Math.max(0,attacks.length-6);i<attacks.length;i++){
+    const a=attacks[i],e=a.event,age=fx.time-a.born;
+    if(age<0||age>.95)continue;
+    const tier=clamp(e.effectTier??e.momentumTier??0,0,4),n=clamp(e.lines||1,1,4),traits=buildFlags(e);
+    const color=e.chargeUsed?GOLD:e.style==='high'?VIOLET:e.style==='guard'||e.style==='repair'?'#8ee8bd':COLORS[tier];
+    let mean=18;
+    if(e.rows?.length){mean=0;for(let r=0;r<Math.min(4,e.rows.length);r++)mean+=e.rows[r].row+.5;mean/=Math.min(4,e.rows.length);}
+    const sy=clamp(b.y+mean*b.cell,205,490),sx=580;
+    ctx.globalCompositeOperation='source-over';
+    if(age<.18){
+      const raw=clamp((age-.09)/.09),u=reduced?raw:raw*raw*(3-2*raw);
+      const px=lerp(sx,target.x,u),py=lerp(sy,target.y,u)-(reduced?0:Math.sin(u*Math.PI)*36);
+      if(n===4){
+        // Four extracted plates compress into a single visible mass, not four tiny sparks.
+        const fold=clamp(age/.085),size=(24+tier*4)*(1+.2*Math.sin(raw*Math.PI));
+        for(let j=0;j<4;j++){
+          const yy=lerp(sy+(j-1.5)*36,py,fold),xx=lerp(sx,px,fold);
+          ctx.globalAlpha=.8*(1-fold*.6);ctx.fillStyle=j%2?color:WHITE;
+          ctx.fillRect(xx-18,yy-9,36,18);
+        }
+        ctx.globalAlpha=reduced?.35:.55;ctx.strokeStyle=color;ctx.lineWidth=32+tier*5;
+        stroke(ctx,lerp(sx,px,.25),lerp(sy,py,.25),px,py);
+        ctx.globalAlpha=.98;ctx.fillStyle=WHITE;
+        polygon(ctx,px,py,size,size,4,reduced?Math.PI/4:Math.PI/4+raw*.7);ctx.fill();
+        ctx.strokeStyle=color;ctx.lineWidth=3;polygon(ctx,px,py,size+12,size+12,4,Math.PI/4);ctx.stroke();
+      }else if(n>=2){
+        for(let j=0;j<n;j++){
+          const spread=(j-(n-1)/2)*(reduced?22:56)*(1-u);
+          ctx.strokeStyle=j%2?WHITE:color;ctx.globalAlpha=.85;ctx.lineWidth=4+tier;
+          stroke(ctx,sx,sy+spread,px,py+spread*.35);
+          polygon(ctx,px,py+spread*.35,8+tier,8+tier,4,Math.PI/4);ctx.fillStyle=color;ctx.fill();
+        }
+      }else{
+        ctx.strokeStyle=color;ctx.globalAlpha=reduced?.3:.4;ctx.lineWidth=18+tier*3;stroke(ctx,sx,sy,px,py);
+        ctx.strokeStyle=WHITE;ctx.globalAlpha=.95;ctx.lineWidth=3+tier*.5;stroke(ctx,Math.max(sx,px-85),lerp(sy,py,.65),px+12,py);
+        polygon(ctx,px,py,19+tier*3,5+tier,4,0);ctx.fillStyle=color;ctx.fill();
+      }
+      // Charge and height/chain traits layer onto the primary line-count silhouette.
+      const q=clamp(e.chargeUsed||0,0,4);
+      for(let j=0;j<q;j++){
+        const v=clamp(raw*1.5-j*.09),xx=lerp(sx+16+j*17,px,v),yy=lerp(535,py,v);
+        ctx.globalAlpha=.85;ctx.fillStyle=GOLD;polygon(ctx,xx,yy,5,9,4,0);ctx.fill();
+      }
+      if((e.combo||0)>1){ctx.globalAlpha=.55;ctx.strokeStyle=VIOLET;ctx.lineWidth=2;polygon(ctx,px,py,23+tier*4,23+tier*4,6,raw);ctx.stroke();}
+      if(traits&1){ctx.globalAlpha=.6;ctx.strokeStyle=VIOLET;ctx.lineWidth=3;stroke(ctx,px-24,py-32,px,py-48);stroke(ctx,px,py-48,px+24,py-32);}
+      if(traits&2){ctx.globalAlpha=.7;ctx.strokeStyle='#8ee8bd';ctx.lineWidth=3;stroke(ctx,px-28,py+32,px+28,py+32);}
+      if(traits&8){ctx.globalAlpha=.6;ctx.strokeStyle=WHITE;ctx.lineWidth=2;stroke(ctx,px+12,py,px+55,py);}
+      continue;
+    }
+    const t=age-.18,fade=clamp(1-t/.77),burst=clamp(1-t/.29),power=.5+n*.19+tier*.08;
+    const tx=a.impactPoint?.x??target.x,ty=a.impactPoint?.y??target.y;
+    ctx.strokeStyle=color;ctx.fillStyle=color;
+    if(n===1){
+      ctx.globalAlpha=fade*(reduced?.3:.68);ctx.lineWidth=reduced?2:4;
+      stroke(ctx,tx-95,ty+52,tx+125,ty-68);
+      ctx.globalAlpha=burst*.85;ctx.strokeStyle=WHITE;ctx.lineWidth=3;stroke(ctx,tx-65,ty+35,tx+92,ty-49);
+    }else if(n<4){
+      ctx.globalAlpha=fade*(reduced?.25:.55);ctx.lineWidth=3;
+      for(let j=0;j<n;j++){
+        const xx=tx+(j-1)*18+(reduced?0:t*58);
+        ctx.beginPath();ctx.moveTo(xx-38,ty-90);ctx.lineTo(xx+18,ty);ctx.lineTo(xx-38,ty+90);ctx.stroke();
+      }
+    }else{
+      const reach=(reduced?82:95+t*165)*power;
+      // Only the two newest attacks fill a large burst; old hits leave cracks, not white fog.
+      if(i>=attacks.length-2&&burst>0){
+        ctx.globalAlpha=burst*(reduced?.12:.34);polygon(ctx,tx,ty,reach,reach*.8,24,.2,.4);ctx.fill();
+        ctx.globalAlpha=burst*(reduced?.25:.8);ctx.strokeStyle=WHITE;ctx.lineWidth=reduced?2:5;
+        polygon(ctx,tx,ty,reach*.62,reach*.62,4,Math.PI/4);ctx.stroke();
+      }
+      ctx.globalAlpha=fade*(reduced?.25:.66);ctx.strokeStyle=color;ctx.lineWidth=2.5;
+      for(let j=0;j<4;j++){
+        const aa=Math.PI/4+j*Math.PI/2,r=(reduced?65:70+t*105)*power;
+        const xx=tx+Math.cos(aa)*r,yy=ty+Math.sin(aa)*r;
+        polygon(ctx,xx,yy,16,26,4,aa);ctx.stroke();
+      }
+    }
+    // Cracks survive the flash and follow distinct angular routes through the boss space.
+    ctx.globalAlpha=fade*(reduced?.24:.55);ctx.strokeStyle=color;ctx.lineWidth=n===4?3:1.6;
+    const rays=n===4?8:n+2,reach=(reduced?100:115+t*100)*power;
+    for(let j=0;j<rays;j++){
+      const aa=j/rays*TAU+.18,inner=35+j%2*14;
+      ctx.beginPath();ctx.moveTo(tx+Math.cos(aa)*inner,ty+Math.sin(aa)*inner);
+      ctx.lineTo(tx+Math.cos(aa+.12)*reach*.63,ty+Math.sin(aa+.12)*reach*.63);
+      ctx.lineTo(tx+Math.cos(aa)*reach,ty+Math.sin(aa)*reach);ctx.stroke();
+    }
+    if(e.chargeUsed){ctx.globalAlpha=fade*.45;ctx.strokeStyle=GOLD;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(tx,ty,100+e.chargeUsed*9,35+t*35,.3,0,TAU);ctx.stroke();}
+    if(traits&(4|16)){
+      ctx.globalAlpha=fade*.55;ctx.strokeStyle='#8ee8bd';ctx.lineWidth=3;
+      if(traits&16){polygon(ctx,tx,ty,115,105,6,Math.PI/6);ctx.stroke();}
+      if(traits&4)for(let j=0;j<3;j++){const xx=tx-40+j*40;stroke(ctx,xx-7,ty+70,xx+7,ty+96);}
+    }
+  }
+  ctx.restore();
+}
+
+return {drawPcStage,drawPcAttack,getPcImpact};
+})();
+(()=>{const {Game,STAGES,UPGRADES,BURDENS,cells,SHAPES,RULES_VERSION}=Core;const {drawBoss,bossAnchor}=Boss;const {Effects}=FX;const {AudioDirector}=Audio;const {DeathReview}=Review;const {drawPcStage,drawPcAttack,getPcImpact}=PcStage;
 
 const $=id=>document.getElementById(id);
 const canvas=$('gameCanvas'),ctx=canvas.getContext('2d');
@@ -1390,7 +1719,7 @@ let sound=readStore('faultline.sound',true),reduced=readStore('faultline.motion'
 const audio=new AudioDirector(sound),fx=new Effects(audio);
 const review=new DeathReview(),physicalKeys=new Set(),physicalPointers=new Set();
 let game=null,paused=false,modalKind='',saved=false,lastTime,acc=0,previousStatus='',uiTimer=0,toastUntil=0;
-let hpTrail=0,pendingHp=[],recordedActions=[],direction=0,dirAge=0,dirRepeats=0;
+let hpTrail=0,displayedHp=0,pendingHp=[],recordedActions=[],direction=0,dirAge=0,dirRepeats=0;
 let choiceLocked=false,guideSection='buffs',recordsMode='standard';
 const pressed=new Set();
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
@@ -1432,14 +1761,14 @@ function startRun(seed,options={}){
   momentumCelebration=null;
   $('toast').classList.remove('show');toastUntil=0;
   $('liveStatus').textContent=game.state.status==='rebuild'?`${game.state.stage}구역 재도전 준비`: `${game.state.stage}구역 전투 시작`;
-  pendingHp=[];hpTrail=game.state.boss?.maxHp||0;clearInput();closeModal();$('startScreen').hidden=true;resize();
+  pendingHp=[];hpTrail=displayedHp=game.state.boss?.hp||0;clearInput();closeModal();$('startScreen').hidden=true;resize();
   audio.unlock();updateUi();
   if(game.state.status==='rebuild'){paused=true;showReward();}else canvas.focus({preventScroll:true});
 }
 function retryPrevious(){const target=Math.max(1,game.state.stage-1);startRun(game.seed,{startStage:target,mode:'assisted'});}
 function beginPrepared(){
   if(!game?.beginPreparedRun())return;
-  fx.reset(game.state.stage);pendingHp=[];hpTrail=game.state.boss.maxHp;paused=false;previousStatus='playing';closeModal();
+  fx.reset(game.state.stage);pendingHp=[];hpTrail=displayedHp=game.state.boss.hp;paused=false;previousStatus='playing';closeModal();
   onEvents(game.drainEvents());audio.unlock();updateUi();toast(`${game.state.stage}구역 재도전 시작`);
 }
 function goHome(){resetReview();game=null;paused=false;previousStatus='';momentumCelebration=null;fx.reset(0);closeModal();$('startScreen').hidden=false;updateUi();}
@@ -1449,7 +1778,7 @@ function act(action){
   onEvents(game.drainEvents());return ok;
 }
 function onEvents(events){
-  if(!events.length)return;fx.consume(events);
+  if(!events.length)return;fx.setPresentationMode?.(LAYOUT.portrait);fx.consume(events);
   for(const e of events){
     if(e.type==='momentumUp'&&[1,4,8,12].includes(e.value)){
       momentumCelebration={tier:e.tier,born:fx.time};
@@ -1458,7 +1787,11 @@ function onEvents(events){
     }
     if(e.type==='clear')pendingHp.push({at:fx.time+.18,hp:e.hpAfter});
     if(e.type==='lock'&&!e.lines)audio.play('lock');
-    if(e.type==='bossAttack'&&e.regen)hpTrail=Math.max(hpTrail,game.state.boss.hp);
+    if(e.type==='bossAttack'&&e.regen){
+      hpTrail=Math.max(hpTrail,game.state.boss.hp);
+      // Keep the hidden balance above max until queued impacts land; clamping here loses same-lock healing.
+      displayedHp+=e.regen;
+    }
     if(e.type==='death'){momentumCelebration=null;$('liveStatus').textContent=e.reason;beginDeathReview();}
     if(e.type==='stageClear')$('liveStatus').textContent=`${e.stage}구역 돌파`;
     if(e.type==='guard'){const message=`방해 1행 차단 · 남은 ${e.remainingUses}회`;toast(message);$('liveStatus').textContent=message;}
@@ -1477,7 +1810,7 @@ function choose(index){
   if(!game||!['reward','rebuild'].includes(modalKind)||choiceLocked)return;
   const rebuilding=game.state.status==='rebuild';if(!game.choose(index))return;
   if(rebuilding){turnChoicePage(()=>game.state.status==='ready'?showPrepared():showReward());return;}
-  closeModal();paused=false;fx.reset(game.state.stage);hpTrail=game.state.boss.maxHp;pendingHp=[];
+  closeModal();paused=false;fx.reset(game.state.stage);hpTrail=displayedHp=game.state.boss.hp;pendingHp=[];
   onEvents(game.drainEvents());previousStatus='playing';updateUi();
   toast(`${pad(game.state.stage)}구역 · ${STAGES[game.state.stage-1].name}`);
 }
@@ -1555,7 +1888,7 @@ function showGuide(section=guideSection){
   guideSection=section;if(game?.state.status==='playing')paused=true;
   const defs=section==='debuffs'?BURDENS:UPGRADES,bad=section==='debuffs';
   const cards=Object.entries(defs).map(([key,def])=>`<article class="guide-card ${bad?'bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프 · 불이익':'＋ 버프 · 유리한 효과'}</span>${bad?'':roleTag(def)}<h3>${esc(def.label)}</h3>${def.trigger?`<p class="guide-trigger">발동 조건 · ${esc(def.trigger)}</p>`:''}<div class="guide-levels">${Array.from({length:def.max},(_,i)=>`<p><b>Lv.${i+1}</b> ${esc(def.description(i+1))}</p>`).join('')}</div><div class="guide-example"><b>구체적인 예시 · 1레벨 기준</b><p>${esc(def.example?.(1)||'')}</p></div><p class="guide-note"><b>알아두기</b><br>${esc(GUIDE_NOTES[key]||'')}</p></article>`).join('');
-  const rules=`<div class="guide-rules"><article><h3>콤보가 끊겨도 기세는 계속됩니다</h3><p>줄을 한 번 지울 때 기세 +1입니다. 1줄과 4줄 모두 한 번이며, 여러 능력이 함께 발동해도 중복으로 올리지 않습니다. 블록을 쌓는 동안, 연쇄 종료, 구역 이동에도 유지됩니다. 새 도전·사망·중간 구역 재도전은 0부터 시작하고 준비 카드 선택으로는 오르지 않습니다. 기세는 연출 지표이며 피해량은 바뀌지 않습니다.</p></article><article><h3>기세 1 / 4 / 8 / 12</h3><p>FOCUS → SURGE → BURST → OVERDRIVE로 외곽 왕관·궤도·탄의 실루엣과 폭발이 커집니다. 최고 단계에서도 숫자는 계속 쌓이지만 광량과 입자 수에는 상한이 있습니다. 예: 1줄 제거 → 못 지움 → 2줄 제거는 콤보는 새로 시작하지만 기세는 1 → 2로 이어집니다.</p></article><article><h3>내 빌드의 성공은 어떻게 보이나요?</h3><p>1줄 강화는 1줄 집중, 2·3줄 강화는 다중 공격, 4줄 강화는 압축 공격으로 표시됩니다. 전하를 소비하면 충전 방출, 높이 조건을 맞추면 고층 돌파·저층 안정, 실제 방해를 막거나 지우면 차단·복구로 강조합니다. 착지 보조 빌드도 줄 제거로 동일하게 +1을 얻습니다. 기다리기·착지·홀드만으로는 기세가 오르지 않습니다.</p></article><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>세 카드 중 하나를 선택하면 좋은 효과와 불이익을 함께 받습니다. 다음 구역부터 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>공격 · 방어 · 조작</h3><p>공격은 보스에게 주는 피해를, 방어는 회색 행을 막거나 지우는 능력을, 조작은 착지 후 움직일 여유를 늘립니다. 선택 가능한 후보가 있으면 공격 1장과 방어·조작 중 1장을 포함합니다. 세 번째는 자유롭게 추첨합니다.</p></article><article><h3>2줄 제거와 2 COMBO는 다릅니다</h3><p>한 블록으로 한 번에 2줄을 지우면 ‘2줄 제거’입니다. 블록을 두 번 연속 놓으며 매번 줄을 지우면 ‘2 COMBO’, 즉 2연쇄입니다. 첫 제거는 연쇄 시작이며, 다음 제거부터 큰 COMBO 숫자가 표시됩니다.</p></article><article><h3>연쇄는 시간으로 끊기지 않습니다</h3><p>줄을 지운 다음 블록으로도 줄을 지우면 연쇄가 이어집니다. 줄을 못 지우면 끝나지만, 연쇄 보호가 있으면 한 연쇄에서 딱 한 번 유지합니다. 기다린 시간이나 팝업이 사라진 것은 종료 조건이 아닙니다. 6연쇄부터 피해 보너스는 최대지만 숫자는 계속 올라갑니다.</p></article><article><h3>피해 · 전하 · 높이</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 줄 제거 피해 보너스는 합산하고 연쇄 배율을 곱합니다. 전하는 다음 줄 제거에 전부 쓰며 최대 4개입니다. 전하와 선제 타격의 추가 피해에는 연쇄 배율을 곱하지 않습니다. 높이는 이번 블록을 놓은 뒤 줄이 사라지기 전에 셉니다.</p></article><article><h3>방어 차단과 방해 행 제거</h3><p>방어 차단은 공격 예고가 01일 때 이번 블록으로 2줄 이상을 지우면 아직 올라오지 않은 방해를 1행 막습니다. 방해 행 제거는 2·3줄을 지울 때 이미 보드에 올라와 있는 회색 행을 1행 없앱니다. 서로 다른 시점에 작동합니다.</p></article><article><h3>회색 행과 세 번째 공격</h3><p>한 번에 올라오는 회색 행들의 빈칸은 같은 열입니다. 다음 공격은 독립적인 랜덤이므로 같은 열이 연속될 수도 있습니다. 주기적 증원을 선택했다면 매 3번째 공격에 1행이 더해집니다. 예를 들어 3·6·9·12번째 공격입니다. 추가 행을 포함한 실제 모양과 공격 번호를 오른쪽 예고에서 확인하세요.</p></article><article><h3>죽어도 다른 조합으로 재도전</h3><p>사망한 구역보다 하나 낮은 구역부터 시작할 수 있습니다. 9구역 사망 → 8구역 재도전이라면, 능력을 초기화하고 1~7구역 보상에 해당하는 일곱 번의 선택을 합니다. 각 선택 화면에서 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
+  const rules=`<div class="guide-rules"><article><h3>PC · 기세가 전장을 바꿉니다</h3><p>큰 고정 배지는 누적 기세, 그 아래 작은 숫자는 현재 콤보입니다. 기세 단계가 오르면 보드 뒤 단층 구조와 후광이 커집니다. 4줄을 지울 수 있는 착지 위치에서는 압축 장치가 준비되고, 성공 시 공격 형태에 맞춰 보스 판재가 벌어집니다. OVERDRIVE에서는 기세 16·20·24처럼 네 번 더 지울 때마다 일제 방출 연출이 반복됩니다. 기세는 줄지 않으며 추가 피해나 조작 대기는 없습니다.</p></article><article><h3>콤보가 끊겨도 기세는 계속됩니다</h3><p>줄을 한 번 지울 때 기세 +1입니다. 1줄과 4줄 모두 한 번이며, 여러 능력이 함께 발동해도 중복으로 올리지 않습니다. 블록을 쌓는 동안, 연쇄 종료, 구역 이동에도 유지됩니다. 새 도전·사망·중간 구역 재도전은 0부터 시작하고 준비 카드 선택으로는 오르지 않습니다. 기세는 연출 지표이며 피해량은 바뀌지 않습니다.</p></article><article><h3>기세 1 / 4 / 8 / 12</h3><p>FOCUS → SURGE → BURST → OVERDRIVE로 외곽 왕관·궤도·탄의 실루엣과 폭발이 커집니다. 최고 단계에서도 숫자는 계속 쌓이지만 광량과 입자 수에는 상한이 있습니다. 예: 1줄 제거 → 못 지움 → 2줄 제거는 콤보는 새로 시작하지만 기세는 1 → 2로 이어집니다.</p></article><article><h3>내 빌드의 성공은 어떻게 보이나요?</h3><p>1줄 강화는 1줄 집중, 2·3줄 강화는 다중 공격, 4줄 강화는 압축 공격으로 표시됩니다. 전하를 소비하면 충전 방출, 높이 조건을 맞추면 고층 돌파·저층 안정, 실제 방해를 막거나 지우면 차단·복구로 강조합니다. 착지 보조 빌드도 줄 제거로 동일하게 +1을 얻습니다. 기다리기·착지·홀드만으로는 기세가 오르지 않습니다.</p></article><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>세 카드 중 하나를 선택하면 좋은 효과와 불이익을 함께 받습니다. 다음 구역부터 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>공격 · 방어 · 조작</h3><p>공격은 보스에게 주는 피해를, 방어는 회색 행을 막거나 지우는 능력을, 조작은 착지 후 움직일 여유를 늘립니다. 선택 가능한 후보가 있으면 공격 1장과 방어·조작 중 1장을 포함합니다. 세 번째는 자유롭게 추첨합니다.</p></article><article><h3>2줄 제거와 2 COMBO는 다릅니다</h3><p>한 블록으로 한 번에 2줄을 지우면 ‘2줄 제거’입니다. 블록을 두 번 연속 놓으며 매번 줄을 지우면 ‘2 COMBO’, 즉 2연쇄입니다. 첫 제거는 연쇄 시작이며, 다음 제거부터 큰 COMBO 숫자가 표시됩니다.</p></article><article><h3>연쇄는 시간으로 끊기지 않습니다</h3><p>줄을 지운 다음 블록으로도 줄을 지우면 연쇄가 이어집니다. 줄을 못 지우면 끝나지만, 연쇄 보호가 있으면 한 연쇄에서 딱 한 번 유지합니다. 기다린 시간이나 팝업이 사라진 것은 종료 조건이 아닙니다. 6연쇄부터 피해 보너스는 최대지만 숫자는 계속 올라갑니다.</p></article><article><h3>피해 · 전하 · 높이</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 줄 제거 피해 보너스는 합산하고 연쇄 배율을 곱합니다. 전하는 다음 줄 제거에 전부 쓰며 최대 4개입니다. 전하와 선제 타격의 추가 피해에는 연쇄 배율을 곱하지 않습니다. 높이는 이번 블록을 놓은 뒤 줄이 사라지기 전에 셉니다.</p></article><article><h3>방어 차단과 방해 행 제거</h3><p>방어 차단은 공격 예고가 01일 때 이번 블록으로 2줄 이상을 지우면 아직 올라오지 않은 방해를 1행 막습니다. 방해 행 제거는 2·3줄을 지울 때 이미 보드에 올라와 있는 회색 행을 1행 없앱니다. 서로 다른 시점에 작동합니다.</p></article><article><h3>회색 행과 세 번째 공격</h3><p>한 번에 올라오는 회색 행들의 빈칸은 같은 열입니다. 다음 공격은 독립적인 랜덤이므로 같은 열이 연속될 수도 있습니다. 주기적 증원을 선택했다면 매 3번째 공격에 1행이 더해집니다. 예를 들어 3·6·9·12번째 공격입니다. 추가 행을 포함한 실제 모양과 공격 번호를 오른쪽 예고에서 확인하세요.</p></article><article><h3>죽어도 다른 조합으로 재도전</h3><p>사망한 구역보다 하나 낮은 구역부터 시작할 수 있습니다. 9구역 사망 → 8구역 재도전이라면, 능력을 초기화하고 1~7구역 보상에 해당하는 일곱 번의 선택을 합니다. 각 선택 화면에서 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
   modal(`<div class="guide-header"><div><p class="modal-eyebrow">FIELD GUIDE / VER ${RULES_VERSION}</p><h2>버프 · 디버프 도감</h2><p class="modal-copy">조건부터 예외까지 읽고, 원하는 조합을 찾아보세요.</p></div><button data-ui="guideClose" type="button">${game?.state.status==='playing'?'전투로 돌아가기':'닫기'}</button></div><nav class="guide-tabs" aria-label="도감 분류"><button data-guide="buffs" aria-pressed="${section==='buffs'}">버프 ${Object.keys(UPGRADES).length}개</button><button data-guide="debuffs" aria-pressed="${section==='debuffs'}">디버프 ${Object.keys(BURDENS).length}개</button><button data-guide="rules" aria-pressed="${section==='rules'}">기본 규칙과 재도전</button></nav>${section==='rules'?rules:`<div class="guide-grid">${cards}</div>`}<div class="modal-actions"><button class="primary" data-ui="guideClose">${game?.state.status==='playing'?'전투로 돌아가기':'처음 화면으로'}</button></div>`,'guide');
 }
 function showHelp(){
@@ -1622,6 +1955,19 @@ function draw(state){
   if(LAYOUT.portrait){drawPortrait(state);return;}
   drawDesktop(state);
 }
+/** Count the rows the current ghost would really complete, without changing the board. */
+function previewClearLines(s,landingY){
+  if(!s?.active||s.status!=='playing'||!Number.isFinite(landingY))return 0;
+  const projected=cells({...s.active,y:landingY});
+  let low=20,high=-1,total=0;
+  for(const [,row]of projected){low=Math.min(low,row);high=Math.max(high,row);}
+  for(let row=Math.max(0,low);row<=Math.min(19,high);row++){
+    let full=true;
+    for(let col=0;col<10;col++)if(!s.board[row][col]&&!projected.some(([x,y])=>x===col&&y===row)){full=false;break;}
+    if(full)total++;
+  }
+  return total;
+}
 function drawMomentum(s,compact=false){
   const value=s.momentum||0,tier=s.momentumTier||0,color=MOMENTUM_COLORS[tier],name=MOMENTUM_NAMES[tier];
   if(compact){
@@ -1636,16 +1982,32 @@ function drawMomentum(s,compact=false){
     const notice=c.kind==='protected'&&age<1.1?'연쇄 보호 사용':c.kind==='ended'&&age<1.1?'연쇄 종료':s.momentumReason||'줄 제거마다 +1';
     text(notice,W-x,bottom+57,10,'#b9c9d1','right');return;
   }
-  text('MOMENTUM / 기세 · 연출',550,688,11,'#a9c4d0','left',true);
-  text(String(value),550,739,44,color,'left',true);text(name,630,721,25,color,'left',true);
-  text(s.momentumReason||'줄을 지워 기세를 쌓으세요',630,743,11,'#b2c8d4');
-  text('구역을 넘어 유지 · 피해량 변화 없음',550,764,10,'#9bb4c2');
-  for(let i=0;i<4;i++){ctx.fillStyle=i<tier?color:'#243240';ctx.fillRect(550+i*88,777,79,5);}
+  const center=495,top=246;
   const age=momentumCelebration?fx.time-momentumCelebration.born:2;
-  if(momentumCelebration&&age<.9){
-    ctx.save();ctx.globalAlpha=Math.min(1,(.9-age)*3);
-    text(name,720,540,32,color,'center',true);text('기세 단계 상승',720,560,11,'#e2e9f2','center');ctx.restore();
-  }
+  const pulse=!reduced&&age<.9?Math.max(0,1-age/.9):0;
+  ctx.save();ctx.fillStyle='#09131de8';ctx.strokeStyle=color;ctx.lineWidth=1.5+pulse*2;
+  ctx.beginPath();ctx.moveTo(448,top+12);ctx.lineTo(462,top);ctx.lineTo(532,top);ctx.lineTo(546,top+12);ctx.lineTo(546,top+154);ctx.lineTo(532,top+166);ctx.lineTo(462,top+166);ctx.lineTo(448,top+154);ctx.closePath();ctx.fill();ctx.stroke();
+  text('MOMENTUM',center,top+21,10,'#cfdfdf','center',true);
+  text('기세 · 연출',center,top+39,10,'#91aebb','center');
+  const digits=String(value).length,size=digits<=2?72:digits===3?49:digits===4?36:27;
+  text(String(value),center,top+109,size,color,'center',true);
+  text(name,center,top+133,name.length>6?14:18,color,'center',true);
+  for(let i=0;i<4;i++){ctx.fillStyle=i<tier?color:'#243240';ctx.fillRect(459+i*20,top+148,14,4);}
+  const combo=s.combo||0;
+  ctx.fillStyle='#09131d';ctx.fillRect(448,top+177,98,82);
+  ctx.strokeStyle='#3e5562';ctx.lineWidth=1;ctx.strokeRect(448.5,top+177.5,97,81);
+  text(combo?String(combo):'—',center,top+207,30,combo?'#f0e6d4':'#69818d','center',true);
+  text('COMBO / 연쇄',center,top+224,9,'#b9cbd5','center',true);
+  if(fx.comboFeedback.kind==='protected'&&fx.time-fx.comboFeedback.noticeAt<1.1)text('연쇄 보호',center,top+245,10,'#efae63','center');
+  ctx.restore();
+  text('MOMENTUM / 기세 · 연출',550,699,10,'#a9c4d0','left',true);
+  text(s.momentumReason||'줄을 지워 기세를 쌓으세요',550,722,13,color);
+  text('구역을 넘어 유지 · 피해량 변화 없음',550,744,10,'#9bb4c2');
+  if(tier===4){
+    const cycle=(value-12)%4;
+    text(`OVERDRIVE · 다음 일제 방출 ${4-cycle}회`,550,771,12,'#e9c389','left',true);
+    for(let i=0;i<4;i++){ctx.fillStyle=i<cycle?'#efc873':'#34423e';ctx.fillRect(812+i*22,763,15,6);}
+  }else text(`다음 기세 단계 ${[1,4,8,12][tier]} · 줄 제거마다 +1`,550,771,11,'#8eabb7');
 }
 function drawPortrait(s){
   ctx.fillStyle='#0a1018';ctx.fillRect(0,0,W,H);
@@ -1711,16 +2073,22 @@ function drawDesktop(state){
   }
   const s=state,b=s.boss,cfg=STAGES[s.stage-1],{x,y,cell}=LAYOUT.board;
   if(!b||s.status==='rebuild'||s.status==='ready')return;
+  const danger=s.board.slice(0,5).some(r=>r.some(Boolean));
+  const previewLines=previewClearLines(s,s.active&&s.status==='playing'?game.ghostY():NaN);
+  const impact=getPcImpact(fx);
   // Only the canvas scene moves; modal buttons and pointer targets stay stationary.
   const tremor=s.stage===10&&b.phase>=2&&s.status==='playing'&&!paused&&!reduced&&b.phaseElapsed%5<.55;
-  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x+(tremor?Math.sin(b.phaseElapsed*53)*1.8:0),recoilY:fx.recoil.y+(tremor?Math.cos(b.phaseElapsed*47)*1.3:0),flash:fx.flash,death:fx.death,reducedMotion:reduced};
+  const opts={...LAYOUT.boss,time:fx.time,phase:b.phase,final:s.stage===10,exposed:b.exposed,attackProgress:1-b.remaining/b.K,recoilX:fx.recoil.x+(tremor?Math.sin(b.phaseElapsed*53)*1.8:0),recoilY:fx.recoil.y+(tremor?Math.cos(b.phaseElapsed*47)*1.3:0),flash:fx.flash,death:fx.death,reducedMotion:reduced,
+    impactSplit:impact.split,impactCompression:impact.compression,scar:impact.scar,hitStyle:impact.style,direction:impact.direction};
+  const target=bossAnchor(opts);
+  drawPcStage(ctx,LAYOUT,s,fx,{reducedMotion:reduced,danger,previewLines,target});
   drawBoss(ctx,opts);
   if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
     const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
   }
-  fx.drawAura?.(ctx,LAYOUT,{momentum:s.momentum,momentumTier:s.momentumTier,combo:s.combo,danger:s.board.slice(0,5).some(r=>r.some(Boolean)),reducedMotion:reduced});
   paintBoard(s,LAYOUT.board);
-  fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced});
+  drawPcAttack(ctx,LAYOUT,s,fx,{reducedMotion:reduced,target});
+  fx.draw(ctx,LAYOUT,target,{reducedMotion:reduced});
   // HUD is drawn above FX, keeping forecasts and the next queue legible.
   text(`SECTOR ${pad(s.stage)} / 10`,10,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+cell*10,y-21,11,'#65ddd0','right');
   text('HOLD',48,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(10,90,76,68);mini(s.held,48,113,14,s.canHold?1:.35);
@@ -1731,13 +2099,14 @@ function drawDesktop(state){
     for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(15,240+i*53,66,39);text('?',48,267+i*53,23,'#b2a6c9','center',true);}
     text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,48,532,9,'#c3b0e0','center',true);
   }else s.queue.slice(0,5).forEach((t,i)=>mini(t,48,244+i*53,13,i? .65:1));
-  text('COMBO / 연쇄',x,y+cell*20+29,9,'#688393','left',true);text(s.combo?`${s.combo}연쇄`:'—',x,y+cell*20+52,17,s.combo?'#65ddd0':'#435966','left',true);
-  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,y+cell*20+70,9,'#a3c9c5');
+  text(previewLines===4?'QUAD READY / 4줄 준비':'BOARD / 10 × 20',x,y+cell*20+29,10,previewLines===4?'#efc873':'#688393','left',true);
+  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,y+cell*20+52,10,'#a3c9c5');
   text('CHARGE',x+cell*10-104,y+cell*20+29,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+cell*10-104+i*25,y+cell*20+41,19,6);}
   text(`${s.stage===10?'FINAL STRUCTURE':'HOSTILE STRUCTURE'} / ${pad(s.stage)}`,550,55,9,'#718d9b','left',true);
   text(s.stage===10?'특이점':`구조체 — ${cfg.name}`,550,88,25,'#e5eae5');
-  text(`${Math.ceil(b.hp).toLocaleString()} / ${b.maxHp.toLocaleString()}`,895,85,11,'#b9cbc9','right',true);
-  ctx.fillStyle='#23313a';ctx.fillRect(550,104,345,5);ctx.fillStyle='#efae6366';ctx.fillRect(550,104,345*clamp(hpTrail/b.maxHp,0,1),5);ctx.fillStyle=b.exposed?'#efae63':'#65ddd0';ctx.fillRect(550,104,345*clamp(b.hp/b.maxHp,0,1),5);
+  const visibleHp=clamp(displayedHp,0,b.maxHp);
+  text(`${Math.ceil(visibleHp).toLocaleString()} / ${b.maxHp.toLocaleString()}`,895,85,11,'#b9cbc9','right',true);
+  ctx.fillStyle='#23313a';ctx.fillRect(550,104,345,5);ctx.fillStyle='#efae6366';ctx.fillRect(550,104,345*clamp(hpTrail/b.maxHp,0,1),5);ctx.fillStyle=b.exposed?'#efae63':'#65ddd0';ctx.fillRect(550,104,345*clamp(visibleHp/b.maxHp,0,1),5);
   text(s.stage===10?`PHASE ${b.phase} / 3 · ${PHASE_NAMES[b.phase]}`:b.armor?(b.exposed?'노출 ×1.35':'방어 ×0.65'):'직접 타격 ×1.00',550,133,10,b.exposed?'#efae63':'#839ca7','left',s.stage===10);
   if(b.pendingPhase>b.phase)text(`다음 주기 → ${PHASE_NAMES[b.pendingPhase]}`,895,133,9,'#efae63','right');
   else if(s.stage===10&&b.phase===3)text(obscured?`일식 · NEXT 복귀 ${b.obscureRemaining.toFixed(1)}초`:`다음 일식 ${Math.ceil(b.obscureCooldown||0)}초`,895,133,10,'#c3b0e0','right');
@@ -1754,18 +2123,18 @@ function drawDesktop(state){
   if(s.upgrades.guard)text(s.guardLeft?`방어 차단 ${s.guardLeft}회 · ${b.guardReady?'2줄 이상 지우면 1행 차단':'공격 예고 01에서 준비'}`:'방어 차단 사용 완료',550,615,10,b.guardReady?'#65ddd0':'#83a49d');
   if(s.upgrades.landing||s.burdens.rigidity)text(`착지 여유 ${((s.lockDelayMs??(500+75*(s.upgrades.landing||0)-35*s.burdens.rigidity))/1000).toFixed(3)}초`,895,636,10,'#a7bed2','right');
   text('BUILD',550,636,9,'#4f6c7c','left',true);text(`${count(s.upgrades)} 강화  /  ${count(s.burdens)} 부담`,550,656,12,'#9eafb6');
-  if(s.status==='reward'||s.status==='won')text('구조체 붕괴',895,656,11,'#65ddd0','right');
+  if((s.status==='reward'||s.status==='won')&&visibleHp===0)text('구조체 붕괴',895,656,11,'#65ddd0','right');
   if(s.upgrades.high||s.upgrades.low){
     const top=s.board.findIndex(row=>row.some(Boolean));const height=top<0?0:s.board.length-top;
     const planned=s.active&&s.status==='playing'?Math.max(height,...cells({...s.active,y:game.ghostY()}).map(([,row])=>s.board.length-row)):height;
     for(const [limit,label,enabled]of [[12,'고층',s.upgrades.high],[6,'저층',s.upgrades.low]])if(enabled){
       const yy=y+(s.board.length-limit)*cell,color=label==='고층'?'#efae63':'#65ddd0';
-      line(x+cell*10+3,yy,x+cell*10+12,yy,color);text(`${label} ${limit}`,x+cell*10+18,yy+4,10,color);
+      line(x+cell*10+2,yy,x+cell*10+7,yy,color);
     }
+    text([s.upgrades.high?'고층 ≥12':'',s.upgrades.low?'저층 ≤6':''].filter(Boolean).join(' · '),x+cell*10+18,y+cell*20-60,10,'#a9bfc7');
     text(`현재 높이 ${height}`,x+cell*10+18,y+cell*20-42,10,'#94a9b3');
     text(`배치 후 ${planned}`,x+cell*10+18,y+cell*20-24,10,'#c6d8d4');
   }
-  fx.drawCombo(ctx,{x:490,y:185},{reducedMotion:reduced});
   drawMomentum(s);
 }
 function resize(){
@@ -1777,6 +2146,7 @@ function resize(){
   if(canvas.style){canvas.style.width=`${LAYOUT.cssWidth}px`;canvas.style.height=`${LAYOUT.cssHeight}px`;canvas.style.aspectRatio=`${W}/${H}`;}
   if(canvas.parentElement?.style)canvas.parentElement.style.width=`${LAYOUT.cssWidth+2}px`;
   canvas.setAttribute('data-layout',LAYOUT.portrait?'portrait':'desktop');
+  fx.setPresentationMode?.(LAYOUT.portrait);
 }
 window.addEventListener('resize',resize);resize();
 function movement(dt){if(direction){dirAge+=dt;while(dirAge>=.14+dirRepeats*.045){act(direction<0?'left':'right');dirRepeats++;}}}
@@ -1786,6 +2156,10 @@ function frame(ms){
   const advance=!paused&&dt<=.25;
   if(advance){
     fx.update(dt);
+    for(const hit of fx.drainImpacts?.()||[]){
+      if(hit.bossId!==game?.state.stage)continue;
+      displayedHp=Math.max(0,displayedHp-Math.max(0,hit.hpBefore-hit.hpAfter));
+    }
     if(game?.state.status==='playing'&&!modalKind){
       acc+=dt;let steps=0;
       while(acc>=1/120&&steps++<32&&game.state.status==='playing'){
