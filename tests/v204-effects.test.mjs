@@ -38,6 +38,20 @@ test('PC promotion/discharge cues are bounded milestones and impact sound remain
   small.consume([{type:'momentumUp',bossId:1,seq:1,value:12,tier:4}]);assert.equal(mobile.length,0);
 });
 
+test('rapid successes cannot extend the PC card or architecture and a quiet gap separates cues',()=>{
+  const fx=new Effects();fx.setPresentationMode(false);
+  const success=(seq,value,tier)=>fx.consume([{type:'momentumUp',bossId:1,seq,value,tier}]);
+  success(1,1,1);assert.equal(fx.pcFeedback.cardAt,0);assert.equal(fx.pcFeedback.stageAt,0);
+  fx.update(.4);success(2,4,2);fx.update(.4);success(3,8,3);
+  assert.equal(fx.pcFeedback.cardAt,0);assert.equal(fx.pcFeedback.stageAt,0);
+  fx.update(.4);success(4,12,4);assert.equal(fx.pcFeedback.cardAt,0,'quiet gap after original one-second card');
+  fx.update(.16);success(5,16,4);assert.equal(fx.pcFeedback.cardAt,fx.time);assert.equal(fx.pcFeedback.stageAt,fx.time);
+  const started=fx.time;fx.update(.4);success(6,17,4);assert.equal(fx.pcFeedback.cardAt,started);
+  fx.reset(2);assert.equal(fx.pcFeedback.cardAt,-Infinity);assert.equal(fx.pcFeedback.stageAt,-Infinity);
+  fx.setPresentationMode(true);fx.consume([{type:'momentumUp',bossId:2,seq:1,value:12,tier:4}]);
+  assert.equal(fx.pcFeedback.cardAt,-Infinity,'portrait never starts the PC cue');
+});
+
 function audioFixture(){
   const oscillators=[],noop=()=>{},param=()=>({value:0,setValueAtTime:noop,linearRampToValueAtTime:noop,exponentialRampToValueAtTime:noop});
   const audio=new AudioDirector();audio.master={};audio.ctx={state:'running',currentTime:1,

@@ -44,19 +44,21 @@ function glow(ctx,layout){
   gradientCache.set(ctx,cached);return cached;
 }
 
-// This broad architectural silhouette stays visible between successful clears.
+// Large architecture appears on milestones, then clears the player's sightline.
 export function drawPcStage(ctx,layout,state,fx,options={}){
   if(layout.portrait||!state?.boss)return;
   const tier=tierOf(state),reduced=!!options.reducedMotion,b=layout.board;
   const bx=b.x+b.cell*10,by=b.y+b.cell*20,time=Number.isFinite(fx.time)?fx.time:0;
   const target=targetOf(layout,fx,options),danger=!!options.danger;
   if(!tier&&!options.previewLines)return;
-  const tint=COLORS[tier],steady=danger?.42:1;
+  const age=time-(fx.pcFeedback?.stageAt??-Infinity);
+  const fade=age>=0&&age<=.2?1:age>.2?clamp(1-(age-.2)/.9):0;
+  const tint=COLORS[tier],base=danger?.42:1,steady=base*fade;
   ctx.save();
   // Protect NEXT/HOLD, the top boss information and the forecast column.
   ctx.beginPath();ctx.rect(87,30,808,Math.min(720,by+18)-30);
   ctx.rect(540,30,355,115);ctx.rect(b.x,b.y,b.cell*10,b.cell*20);ctx.clip('evenodd');
-  if(tier){
+  if(tier&&fade>0){
     ctx.globalAlpha=steady*(reduced?.42:.66+(Math.sin(time*.9)*.025));
     ctx.fillStyle=glow(ctx,layout).gradients[tier-1];ctx.fillRect(87,30,510,Math.min(720,by+18)-30);
     // Layered slabs form a growing open gate, rather than a narrow decorative frame.
@@ -85,16 +87,7 @@ export function drawPcStage(ctx,layout,state,fx,options={}){
       if(tier>=3){polygon(ctx,target.x,target.y,radius+28,radius*.78+28,6,Math.PI/6);ctx.stroke();}
     }
     if(tier===4){
-      const charge=(Math.max(0,state.momentum-12)%4);
       const pulse=cyclePulse(fx);
-      // Four broad capacitors visibly assemble and discharge again after OVERDRIVE.
-      for(let i=0;i<4;i++){
-        const xx=608+i*68,yy=174,filled=i<charge;
-        ctx.globalAlpha=steady*(filled?.7:.2);ctx.fillStyle=filled?GOLD:'#b48b4e';
-        ctx.beginPath();ctx.moveTo(xx-23,yy);ctx.lineTo(xx,yy-10);ctx.lineTo(xx+23,yy);
-        ctx.lineTo(xx,yy+10);ctx.closePath();ctx.fill();
-        ctx.globalAlpha=steady*.62;ctx.strokeStyle=GOLD;ctx.lineWidth=1.5;ctx.stroke();
-      }
       if(pulse>0){
         ctx.globalAlpha=steady*pulse*(reduced?.18:.48);ctx.strokeStyle=WHITE;ctx.lineWidth=reduced?3:10;
         const reach=(1-pulse)*155;
@@ -106,6 +99,17 @@ export function drawPcStage(ctx,layout,state,fx,options={}){
         const xx=bx+5+i*17,height=70+i*25;
         ctx.beginPath();ctx.moveTo(xx,by);ctx.lineTo(xx+19,by-height);ctx.lineTo(xx+35,by);ctx.closePath();ctx.fill();
       }
+    }
+  }
+  // Small charge slots stay readable after the large architecture has faded.
+  if(tier===4){
+    const charge=Math.max(0,state.momentum-12)%4;
+    for(let i=0;i<4;i++){
+      const xx=608+i*68,yy=174,filled=i<charge;
+      ctx.globalAlpha=base*(filled?.7:.2);ctx.fillStyle=filled?GOLD:'#b48b4e';
+      ctx.beginPath();ctx.moveTo(xx-23,yy);ctx.lineTo(xx,yy-10);ctx.lineTo(xx+23,yy);
+      ctx.lineTo(xx,yy+10);ctx.closePath();ctx.fill();
+      ctx.globalAlpha=base*.62;ctx.strokeStyle=GOLD;ctx.lineWidth=1.5;ctx.stroke();
     }
   }
   if(options.previewLines===4){

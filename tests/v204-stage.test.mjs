@@ -12,10 +12,10 @@ function context(){
 const state=(tier=4,momentum=12)=>({boss:{},momentumTier:tier,momentum});
 const attack=(lines=4,momentum=12)=>({born:0,impacted:true,event:{lines,momentum,momentumTier:4,effectTier:4,combo:3,chargeUsed:2,style:'charge',rows:[{row:19}]},impactPoint:{x:715,y:335}});
 
-test('PC arena evolves its large persistent silhouette, protects live cells/HUD and caches gradients',()=>{
+test('PC arena evolves its large milestone silhouette, protects live cells/HUD and caches gradients',()=>{
   const counts=[];
   for(let tier=1;tier<=4;tier++){
-    const r=context();drawPcStage(r.ctx,desktop,state(tier),{time:2,attacks:[]});r.balanced();counts.push(r.count('lineTo'));
+    const r=context();drawPcStage(r.ctx,desktop,state(tier),{time:2,attacks:[],pcFeedback:{stageAt:1.8}});r.balanced();counts.push(r.count('lineTo'));
     assert.ok(r.calls.some(c=>c[0]==='rect'&&c[1]===100&&c[2]===48&&c[3]===340&&c[4]===680));
     assert.ok(r.calls.some(c=>c[0]==='rect'&&c[1]===540&&c[2]===30&&c[4]===115));
     assert.ok(r.calls.some(c=>c[0]==='clip'&&c[1]==='evenodd'));
@@ -27,22 +27,34 @@ test('PC arena evolves its large persistent silhouette, protects live cells/HUD 
 
 test('danger and reduced effects preserve the arena shape while reducing its glow',()=>{
   const a=context(),b=context();
-  drawPcStage(a.ctx,desktop,state(),{time:2,attacks:[]});
-  drawPcStage(b.ctx,desktop,state(),{time:2,attacks:[]},{danger:true,reducedMotion:true});
+  drawPcStage(a.ctx,desktop,state(),{time:2,attacks:[],pcFeedback:{stageAt:1.8}});
+  drawPcStage(b.ctx,desktop,state(),{time:2,attacks:[],pcFeedback:{stageAt:1.8}},{danger:true,reducedMotion:true});
   assert.equal(a.count('lineTo'),b.count('lineTo'));
   assert.ok(Math.max(...b.props.filter(([k])=>k==='globalAlpha').map(([,v])=>v))<.5);b.balanced();
 });
 
+test('large milestone architecture fades fully while the four small charge slots remain',()=>{
+  const first=context(),fading=context(),idle=context();
+  drawPcStage(first.ctx,desktop,state(),{time:.1,attacks:[],pcFeedback:{stageAt:0}});
+  drawPcStage(fading.ctx,desktop,state(),{time:.8,attacks:[],pcFeedback:{stageAt:0}});
+  drawPcStage(idle.ctx,desktop,state(),{time:2,attacks:[],pcFeedback:{stageAt:0}});
+  const firstAlpha=r=>r.props.find(([k])=>k==='globalAlpha')[1];
+  assert.ok(firstAlpha(fading)<firstAlpha(first));
+  assert.equal(idle.count('gradient'),0);assert.equal(idle.count('fillRect'),0);
+  assert.equal(idle.count('fill'),4,'only small charge slots remain after fade');
+  first.balanced();fading.balanced();idle.balanced();
+});
+
 test('overdrive reassembles four capacitors and discharges on subsequent groups of four successes',()=>{
   const charging=context(),pulse=context();
-  drawPcStage(charging.ctx,desktop,state(4,15),{time:.4,attacks:[]});
-  drawPcStage(pulse.ctx,desktop,state(4,16),{time:.4,attacks:[attack(4,16)]});
+  drawPcStage(charging.ctx,desktop,state(4,15),{time:.4,attacks:[],pcFeedback:{stageAt:0}});
+  drawPcStage(pulse.ctx,desktop,state(4,16),{time:.4,attacks:[attack(4,16)],pcFeedback:{stageAt:0}});
   assert.ok(pulse.count('lineTo')>charging.count('lineTo'));pulse.balanced();
 });
 
 test('overdrive capacitor silhouettes stay above the boss and outside the badge and combo panels',()=>{
   for(const momentum of [12,13,14,15,16]){
-    const r=context();drawPcStage(r.ctx,desktop,state(4,momentum),{time:2,attacks:[]});
+    const r=context();drawPcStage(r.ctx,desktop,state(4,momentum),{time:2,attacks:[],pcFeedback:{stageAt:1.8}});
     const slots=r.calls.filter(c=>c[0]==='moveTo'&&c[2]===174&&c[1]>=580&&c[1]<=820);
     assert.deepEqual(slots.map(c=>c[1]),[585,653,721,789]);
     for(const c of slots)assert.ok(c[1]>546,'all capacitor edges clear the badge and combo corridor');

@@ -21,7 +21,7 @@ function prepared(stage=1,upgrades={},burdens={}){
 }
 
 test('v2.0.1 replaces two attack variants with defense/control and honors per-definition burden limits',()=>{
-  assert.equal(RULES_VERSION,'2.0.4');assert.equal(Object.keys(UPGRADES).length,12);
+  assert.equal(RULES_VERSION,'2.0.5');assert.equal(Object.keys(UPGRADES).length,12);
   assert.equal('repeat' in UPGRADES,false);assert.equal('convert' in UPGRADES,false);
   assert.equal(UPGRADES.guard.category,'defense');assert.equal(UPGRADES.landing.category,'control');
   assert.equal(BURDENS.reinforcement.max,1);

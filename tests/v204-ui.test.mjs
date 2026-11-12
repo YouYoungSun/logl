@@ -6,9 +6,9 @@ import {UPGRADES,BURDENS,RULES_VERSION} from '../src/core.mjs';
 // A small DOM adapter exercises the real delegated handlers and frame loop.
 // Its DOMTokenList deliberately rejects empty tokens, as browsers do.
 function harness(){
-  const drawn=[];let nextFrame;const windowEvents=new Map();let appWidth=390;const storage=new Map(),elements=new Map(),listeners=new Map();
+  const drawn=[],positions=[];let nextFrame;const windowEvents=new Map();let appWidth=390;const storage=new Map(),elements=new Map(),listeners=new Map();
   const noop=()=>{};
-  const ctx=new Proxy({fillText:(value)=>drawn.push(String(value)),measureText:text=>({width:String(text).length*7}),
+  const ctx=new Proxy({fillText:(value,x,y)=>{drawn.push(String(value));positions.push({value:String(value),x,y});},measureText:text=>({width:String(text).length*7}),
     createRadialGradient:()=>({addColorStop:noop}),createLinearGradient:()=>({addColorStop:noop})},
     {get:(target,key)=>key in target?target[key]:noop});
   const doc={activeElement:null,hidden:false,
@@ -39,12 +39,12 @@ function harness(){
     const target=new Element();target.dataset[key]=value;
     doc.getElementById('modal').events.get('click')({target});
   };
-  return {doc,storage,drawn,click,key:code=>{listeners.get('keydown')({code,target:doc.getElementById('gameCanvas'),preventDefault(){},repeat:false});listeners.get('keyup')({code});},resize:(width,height)=>{appWidth=Math.min(width,1220);globalThis.innerWidth=width;globalThis.innerHeight=height;windowEvents.get('resize')();},frame:ms=>{assert.ok(nextFrame);const fn=nextFrame;nextFrame=null;fn(ms);},
+  return {doc,storage,drawn,positions,click,key:code=>{listeners.get('keydown')({code,target:doc.getElementById('gameCanvas'),preventDefault(){},repeat:false});listeners.get('keyup')({code});},resize:(width,height)=>{appWidth=Math.min(width,1220);globalThis.innerWidth=width;globalThis.innerHeight=height;windowEvents.get('resize')();},frame:ms=>{assert.ok(nextFrame);const fn=nextFrame;nextFrame=null;fn(ms);},
     restore:()=>{for(const [key,descriptor]of previous)descriptor?Object.defineProperty(globalThis,key,descriptor):delete globalThis[key];}};
 }
 
 
-test('PC keeps HP until impact, exposes a large persistent badge and previews only real quad clears',async()=>{
+test('PC keeps HP until impact, exposes a large success badge and previews only real quad clears',async()=>{
   const h=harness();
   try{
     const {startRun,getGame,previewClearLines}=await import('../src/main.mjs?pc-ui-204');
@@ -88,5 +88,27 @@ test('PC finishing blow waits for its complete collapse while portrait retains t
     h.frame(1130);assert.equal(el('modal').hidden,false);assert.ok(el('modalContent').innerHTML.includes('data-choice'));
     h.resize(390,844);startRun('mobile-kill');h.frame(0);kill();
     h.frame(200);h.frame(410);assert.equal(el('modal').hidden,false,'portrait keeps the existing 400ms transition');
+  }finally{h.restore();}
+});
+
+test('PC success card moves to the far edge and expires through rapid clears while small HUD remains',async()=>{
+  const h=harness();
+  try{
+    const {startRun,getGame}=await import('../src/main.mjs?pc-fade-205');
+    h.resize(1280,900);startRun('pc-fade');const g=getGame();g.state.boss.hp=g.state.boss.maxHp=1000000;g.state.boss.remaining=9999;
+    const single=()=>{
+      g.state.board=Array.from({length:20},()=>Array(10).fill(null));g.state.tags=Array(20).fill(null);
+      g.state.board[19].fill('G');for(let x=3;x<7;x++)g.state.board[19][x]=null;
+      g.state.active={type:'I',rotation:0,x:3,y:18};h.key('Space');
+    };
+    h.frame(0);single();h.frame(16);
+    assert.ok(h.positions.some(p=>p.value==='MOMENTUM'&&p.x===960&&p.y===520));
+    assert.ok(!h.positions.some(p=>p.value==='MOMENTUM'&&p.x<900));
+    for(let i=1;i<=10;i++){single();h.frame(i*100);}
+    h.drawn.length=0;h.frame(1100);
+    assert.ok(!h.drawn.includes('MOMENTUM'),'rapid clears do not keep the large card visible');
+    assert.ok(h.drawn.includes('MOMENTUM / 기세 · 연출'));assert.ok(h.drawn.includes('11 COMBO'));
+    h.frame(1200);h.frame(1300);h.drawn.length=0;single();h.frame(1316);
+    assert.ok(h.drawn.includes('MOMENTUM'),'a new success can appear after the quiet gap');
   }finally{h.restore();}
 });

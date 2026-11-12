@@ -37,6 +37,7 @@ export class Effects {
     this.bossPulse=0; this.guardPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
     this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
     this.momentumFeedback={value:0,tier:0,changedAt:-Infinity,reason:'',style:'standard'};this.displayMomentumTier=0;
+    this.pcFeedback={cardAt:-Infinity,cardStrong:false,stageAt:-Infinity};
     this.compact=this.compact||false;this.particleLimit=this.compact?120:240;
     for(const p of this.pool)p.active=false;
   }
@@ -70,7 +71,14 @@ export class Effects {
         const value=Number.isSafeInteger(e.value)&&e.value>=0?e.value:0,tier=clamp(Math.floor(e.tier??momentumTier(value)),0,4);
         const promoted=tier>Math.max(this.momentumFeedback.tier,this.displayMomentumTier);
         this.momentumFeedback={value,tier,changedAt:promoted?this.time:this.momentumFeedback.changedAt,reason:e.reason||'',style:e.style||'standard'};
-        if(this.pcPresentation&&(promoted||value>12&&(value-12)%4===0))this.audio?.play?.(promoted?'momentum':'discharge',1,{momentumTier:tier,presentation:'pc'});
+        const strong=promoted||value>12&&(value-12)%4===0;
+        if(this.pcPresentation){
+          const cue=this.pcFeedback,duration=cue.cardStrong?1:.65;
+          // Keep the original expiry through rapid chains, with a quiet gap.
+          if(this.time>=cue.cardAt+duration+.25){cue.cardAt=this.time;cue.cardStrong=strong;}
+          if(strong&&this.time>=cue.stageAt+1.35)cue.stageAt=this.time;
+          if(strong)this.audio?.play?.(promoted?'momentum':'discharge',1,{momentumTier:tier,presentation:'pc'});
+        }
       } else if(e.type==='momentumStyle') {
         this.momentumFeedback={...this.momentumFeedback,reason:e.reason||'',style:e.style||'standard'};
         const pending=this.attacks.findLast(a=>!a.impacted&&a.event.momentum===e.value);
@@ -81,7 +89,7 @@ export class Effects {
         this.comboFeedback={count:0,endedCount:e.combo,lines:0,kind:'ended',changedAt:this.time,noticeAt:this.time};
       } else if(e.type==='stageClear'||e.type==='death') {
         this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
-        if(e.type==='death'){this.momentumFeedback={value:0,tier:0,changedAt:-Infinity,reason:'',style:'standard'};this.displayMomentumTier=0;}
+        if(e.type==='death'){this.momentumFeedback={value:0,tier:0,changedAt:-Infinity,reason:'',style:'standard'};this.displayMomentumTier=0;this.pcFeedback={cardAt:-Infinity,cardStrong:false,stageAt:-Infinity};}
       } else if(e.type==='guard') {
         this.guardPulse=1;
       } else if(e.type==='bossAttack') {
