@@ -108,15 +108,15 @@ test('above-top blocks may be rescued by a clear, but lockout is resolved before
   assert.equal(dead.drainEvents().some(e=>e.type==='clear'),false);
 });
 
-test('grace is spent once per entire chain; conversion and charge are independent',()=>{
+test('grace is spent once per entire chain while non-clear charge remains independent',()=>{
   const g=new Game('chain');g.state.boss.hp=9999;
-  Object.assign(g.state.upgrades,{grace:1,convert:2,charge:1});
+  Object.assign(g.state.upgrades,{grace:1,charge:1});
   for(let i=0;i<2;i++){clearFixture(g);g.act('drop');}
   assert.equal(g.state.combo,2);
   nonclearFixture(g);g.act('drop');assert.equal(g.state.combo,2);assert.equal(g.state.charge,1);
   clearFixture(g);g.act('drop');assert.equal(g.state.combo,3);assert.equal(g.state.charge,0);
-  nonclearFixture(g);g.act('drop');assert.equal(g.state.combo,0);assert.equal(g.state.charge,3);
-  nonclearFixture(g);g.act('drop');assert.equal(g.state.charge,4);
+  nonclearFixture(g);g.act('drop');assert.equal(g.state.combo,0);assert.equal(g.state.charge,1);
+  nonclearFixture(g);g.act('drop');assert.equal(g.state.charge,2);
 });
 
 test('response uses the pre-lock remaining count and cancels the final telegraphed row',()=>{
@@ -173,7 +173,6 @@ test('nine reward decisions accumulate both ranks; stage ten has no reward and d
     assert.equal(g.state.offers.length,3);
     assert.equal(new Set(g.state.offers.map(o=>o.upgrade)).size,3);
     assert.equal(new Set(g.state.offers.map(o=>o.burden)).size,3);
-    if(stage>=7&&g.state.upgrades.opening===0)assert.ok(g.state.offers.every(o=>o.upgrade!=='opening'));
     assert.equal(g.choose(0),true);assert.equal(g.state.held,null);
   }
   assert.equal(g.state.stage,10);assert.equal(g.state.history.length,9);

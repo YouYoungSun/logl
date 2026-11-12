@@ -29,7 +29,8 @@ export class Effects {
     this.recoil={x:0,y:0}; this.velocity={x:0,y:0};
     this.flash=0; this.death=0; this.victoryAt=null; this.readyAt=null;
     this.attacks=[]; this.repairs=[]; this.numbers=[];
-    this.bossPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
+    this.bossPulse=0; this.guardPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
+    this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
     for(const p of this.pool)p.active=false;
   }
   consume(events) {
@@ -41,16 +42,26 @@ export class Effects {
         this.lastSeq=e.seq;
       }
       if(e.type==='clear' && Array.isArray(e.rows) && e.rows.length) {
+        // The success counter changes at removal, never at a delayed impact.
+        this.comboFeedback={count:e.combo||1,lines:e.lines,kind:'active',changedAt:this.time,noticeAt:-Infinity};
         const copy={...e,rows:e.rows.map(r=>({row:r.row,colors:[...(r.colors||[])]}))};
         this.attacks.push({event:copy,born:this.time,impacted:false,impactPoint:null});
         if(this.attacks.length>64) {
           const removable=this.attacks.findIndex(a=>!a.event.killed && a.impacted);
           this.attacks.splice(removable>=0?removable:0,1);
         }
-        this.audio?.play?.('clear',clamp(e.lines/4,.25,1));
+        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1});
         if(e.killed && this.victoryAt===null) {
           this.victoryAt=this.time; this.readyAt=this.time+.4;
         }
+      } else if(e.type==='comboProtected') {
+        this.comboFeedback={...this.comboFeedback,count:e.combo,kind:'protected',noticeAt:this.time};
+      } else if(e.type==='comboEnded') {
+        this.comboFeedback={count:0,endedCount:e.combo,lines:0,kind:'ended',changedAt:this.time,noticeAt:this.time};
+      } else if(e.type==='stageClear'||e.type==='death') {
+        this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
+      } else if(e.type==='guard') {
+        this.guardPulse=1;
       } else if(e.type==='bossAttack') {
         this.bossPulse=1;
         this.audio?.play?.('boss',1);
@@ -68,6 +79,7 @@ export class Effects {
     [this.recoil.y,this.velocity.y]=damp(this.recoil.y,this.velocity.y,dt);
     this.flash*=Math.exp(-22*dt);
     this.bossPulse*=Math.exp(-11*dt);
+    this.guardPulse*=Math.exp(-8*dt);
     for(const p of this.pool)if(p.active) {
       p.age+=dt;if(p.age>=p.life)p.active=false;
     }
@@ -113,6 +125,38 @@ export class Effects {
       size:1.4+rand(seed*3+i)*2.4,color:i%3===0?IVORY:AMBER,
       ox:origin?.x??null,oy:origin?.y??null});
   }
+  drawCombo(ctx,position={x:490,y:185},options={}) {
+    const c=this.comboFeedback;
+    if(!ctx||!c||c.kind==='idle')return;
+    const {x,y}=position,age=Math.max(0,this.time-c.changedAt),noticeAge=this.time-c.noticeAt;
+    ctx.save();ctx.globalCompositeOperation='source-over';ctx.textAlign='center';
+    const label=(value,yy,size,color=CYAN)=>{ctx.fillStyle=color;ctx.font=`500 ${size}px GameMono,Consolas,monospace`;ctx.fillText(value,x,yy);};
+    if(c.kind==='ended'){
+      if(noticeAge<1.1){
+        ctx.globalAlpha=clamp((1.1-noticeAge)/.4);
+        label('연쇄 종료',y+20,12,'#9aaeb9');label(`${c.endedCount}연쇄`,y+42,15,'#9aaeb9');
+      }
+      ctx.restore();return;
+    }
+    const milestone=c.count===3||c.count===6;
+    if(milestone&&age<.35&&!options.reducedMotion){
+      ctx.globalAlpha=(1-age/.35)*.65;ctx.strokeStyle=c.count>=6?AMBER:CYAN;ctx.lineWidth=1;
+      ctx.strokeRect(x-44,y-14,88,101);ctx.globalAlpha=1;
+    }
+    label('COMBO',y,10,'#9bb5c0');
+    if(c.count===1){label('연쇄 시작',y+32,13);}
+    else{
+      const pop=!options.reducedMotion&&age<.14?1+.14*Math.sin(Math.PI*age/.14):1;
+      ctx.save();ctx.translate(x,y+35);ctx.scale(pop,pop);
+      ctx.fillStyle=c.count>=6?AMBER:CYAN;ctx.font=`700 ${c.count>=100?28:36}px GameMono,Consolas,monospace`;
+      ctx.fillText(String(c.count),0,0);ctx.restore();
+      label(`${c.count}연쇄`,y+52,11,'#bed1d8');
+    }
+    if(c.kind==='protected'&&noticeAge<1.1)label('연쇄 보호 사용',y+70,10,AMBER);
+    else if(c.count>=6)label('연쇄 보너스 최대',y+70,9,AMBER);
+    else if(c.lines)label(`${c.lines}줄 제거`,y+70,10,'#96b0be');
+    ctx.restore();
+  }
   draw(ctx,layout,target,options={}) {
     const b=layout?.board;
     if(!ctx||!b||!target)return;
@@ -133,6 +177,11 @@ export class Effects {
     if(this.bossPulse>.015) {
       ctx.globalAlpha=this.bossPulse*.45;ctx.strokeStyle=AMBER;ctx.lineWidth=2;
       ctx.strokeRect(b.x-3,b.y-3,cell*10+6,cell*20+6);
+    }
+    if(this.guardPulse>.015){
+      ctx.globalAlpha=this.guardPulse*.8;ctx.strokeStyle=CYAN;ctx.lineWidth=reduced?2:3;
+      const yy=b.y+cell*20+2;
+      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cell*10,yy);ctx.stroke();
     }
     ctx.globalCompositeOperation='lighter';
     for(const a of this.attacks.slice(-6)) {

@@ -14,14 +14,18 @@ export class AudioDirector {
   }
   setEnabled(value){this.enabled=value;if(!value)this.stop();else this.unlock();}
   stop(){for(const v of this.voices){try{v.stop();}catch{}}this.voices=[];}
-  play(kind,power=1){
+  play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
     this.voices=this.voices.filter(v=>!v._finished);
     while(this.voices.length>=4){try{this.voices.shift().stop();}catch{}}
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
     let duration=.06,volume=.10,from=160,to=80;
-    if(kind==='clear'){from=600;to=1000;duration=.055;volume=.035;}
+    if(kind==='clear'){
+      const combo=Math.min(6,Math.max(1,options.combo||1));
+      const semitones=combo>=6?7:combo>=3?4:combo>=2?2:0,ratio=2**(semitones/12);
+      from=600*ratio;to=1000*ratio;duration=combo===3||combo===6?.07:.055;volume=.035;
+    }
     if(kind==='hit'){from=180-p*20;to=55;duration=.09+p*.025;volume=.12+p*.018;}
     if(kind==='boss'){from=72;to=35;duration=.18;volume=.21;}
     if(kind==='lock'){from=130;to=70;duration=.035;volume=.055;}

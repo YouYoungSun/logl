@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a1018">
   <meta name="description" content="줄을 지워 보스를 공격하고, 아홉 번의 선택으로 열 번째 구역을 돌파하세요.">
-  <title>FAULTLINE ver2 — 단층</title>
+  <title>FAULTLINE ver2.0.1 — 단층</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%2365ddd0' d='M8 8h32v16H24v16H8zm32 16h16v32H24V40h16z'/%3E%3C/svg%3E">
   <style>@font-face{font-family:GameMono;src:local('Cascadia Code'),local('Consolas'),local('DejaVu Sans Mono');font-display:swap}
 :root{color-scheme:dark;--bg:#0a1018;--panel:#101a25;--ink:#e7ecea;--muted:#83949f;--line:#26333f;--cyan:#65ddd0;--amber:#efae63;--red:#ed826e;font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif}
@@ -26,6 +26,9 @@
 @media(max-width:1000px){.intro{width:65%}.intro-facts{margin:14px 0}.guide-entry{padding:9px 11px}.guide-entry small{font-size:9px}.intro-art{width:80%}.modal{padding:18px}.modal-content{max-height:calc(100dvh - 36px);padding:18px}.guide-tabs{top:-18px}.reward-card{padding:15px}.reward-card h3{font-size:19px}.effect-heading{flex-wrap:wrap}.modal h2{font-size:24px}}
 @media(max-width:680px){.surface:has(.start-screen:not([hidden])){min-height:440px}.start-screen{padding:22px 18px}.intro{width:100%}.intro-art{width:100%;opacity:.4;object-position:70% center;mask-image:linear-gradient(90deg,transparent,#000 80%)}h1{font-size:48px;margin-top:18px}.eyebrow{font-size:8px}.intro-ko{font-size:12px;margin:12px 0 15px}.intro-copy{font-size:12px;line-height:1.8}.start-actions{margin-top:18px}.start-actions button{font-size:12px;padding:10px 13px}.guide-entry{max-width:330px;min-height:48px;margin-top:10px}.guide-entry span{font-size:12px}.guide-entry small{font-size:10px}.seed-label{font-size:9px;margin-top:14px}.seed-label input{font-size:11px;width:150px}.text-button{font-size:11px;margin-top:12px;min-height:30px}.intro-version{font-size:11px}.game-footer{padding:12px 5px}#footerHint{white-space:normal;text-align:center;line-height:1.6;font-size:10px}.modal{padding:8px}.modal-content{padding:17px 13px;max-height:calc(100dvh - 16px)}.modal-content.narrow{padding:20px 16px}.modal h2{font-size:23px}.modal-copy{font-size:13px}.reward-grid{grid-template-columns:1fr;gap:16px}.reward-card{padding:18px}.reward-card h3{font-size:22px}.effect-heading{flex-wrap:nowrap}.card-description{font-size:14px}.burden-block p{font-size:13px}.choice-toolbar{gap:8px}.choice-toolbar span{font-size:11px}.reward-next{display:none}.build-list{grid-template-columns:1fr}.guide-header{gap:9px}.guide-header>button{font-size:11px;padding:8px 10px}.guide-tabs{top:-17px;gap:5px;padding-bottom:12px}.guide-tabs button{font-size:12px;padding:10px}.guide-grid,.guide-rules{grid-template-columns:1fr}.guide-card{padding:18px}.guide-card h3{font-size:22px}.guide-levels p,.guide-rules p{font-size:14px}.guide-example,.guide-note{font-size:13px}.tag{font-size:11px}.stat-grid b{font-size:19px}.stat-grid div{padding:12px 8px}.toast{position:fixed;bottom:16px}.rebuild-progress span{width:27px;height:27px}}
 @media(prefers-reduced-motion:reduce){.page-leaving,.page-entering{animation:none!important;transform:none!important;opacity:1!important}}
+
+/* Role labels explain why an upgrade helps before the numeric detail. */
+.ability-title{display:flex;flex-direction:column;align-items:flex-start;gap:7px}.ability-role{display:inline-flex;align-items:center;width:max-content;padding:3px 7px;border:1px solid #4c707b;font-size:11px;font-weight:650;line-height:1.5;color:#c6dde1;background:#152b34}.role-defense{color:#b8ebc9;border-color:#4b8069;background:#16332b}.role-control{color:#d3c9f2;border-color:#74638d;background:#27243b}.guide-card>.ability-role{margin-top:12px}.build-item>.ability-role{margin-bottom:8px}.build-item strong{display:block}
 </style>
 </head>
 <body>
@@ -49,7 +52,7 @@
         <div class="intro">
           <div class="eyebrow"><span></span> BLOCK COMBAT / ROGUELIKE</div>
           <h1>FAULT<span>LINE</span></h1>
-          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.0</span></p>
+          <p class="intro-ko">단층 <span class="intro-version">VER 2.0.1</span></p>
           <p class="intro-copy">지운 줄이 공격이 된다.<br>아홉 번의 선택을 쌓아, 열 번째 구역을 돌파하라.</p>
           <div class="intro-facts"><span><b>10</b> 구역</span><span><b>09</b> 누적 선택</span><span><b>03</b> 최종 페이즈</span></div>
           <div class="start-actions"><button id="startBtn" class="primary" type="button">런 시작 <span>↗</span></button><button id="helpBtn" class="secondary" type="button">조작과 규칙</button></div>
@@ -86,25 +89,25 @@ const Core=(()=>{
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 const WIDTH = 10;
 const HEIGHT = 20;
-const RULES_VERSION = '2.0.0';
+const RULES_VERSION = '2.0.1';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);
 const rankMap = defs => Object.fromEntries(Object.keys(defs).map(k => [k, 0]));
 
 const UPGRADES = {
-  single: { label: '1줄 강화', max: 3, trigger:'1줄 제거', description:r=>`한 번에 1줄을 지울 때 줄 제거 피해 +${40*r}%.`, example:r=>`다른 효과가 없다면 1줄 피해: 10 → ${Math.floor(10*(1+.4*r)+.5)}.` },
-  middle: { label: '2·3줄 강화', max: 3, trigger:'2~3줄 동시 제거', description:r=>`한 번에 2줄 또는 3줄을 지울 때 줄 제거 피해 +${20*r}%.`, example:r=>`다른 효과가 없다면 2줄 피해: 24 → ${Math.floor(24*(1+.2*r)+.5)}. 1줄과 4줄에는 적용되지 않습니다.` },
-  compress: { label: '4줄 강화', max: 3, trigger:'4줄 동시 제거', description:r=>`한 번에 4줄을 지울 때 줄 제거 피해 +${35*r}%.`, example:r=>`다른 효과가 없다면 4줄 피해: 64 → ${Math.floor(64*(1+.35*r)+.5)}.` },
-  repeat: { label: '4줄 재공격', max: 3, trigger:'지난 제거도 4줄', description:r=>`마지막으로 지운 줄이 4줄이었다면, 이번 4줄 제거 피해 +${25*r}%.`, example:()=>`4줄 제거 → 줄을 못 지움 → 4줄 제거: 적용됩니다. 4줄 제거 → 1줄 제거 → 4줄 제거: 적용되지 않습니다.` },
-  combo: { label: '연쇄 강화', max: 3, trigger:'블록을 놓을 때마다 연속 제거', description:r=>`연쇄 피해 보너스가 단계당 15%에서 ${15+4*r}%로 증가합니다. 6연쇄부터는 더 늘지 않습니다.`, example:r=>`다른 효과가 없다면 1/2/3연쇄의 줄 제거 피해 배율은 100/${115+4*r}/${130+8*r}%입니다. 줄을 못 지우면 연쇄가 끝납니다.` },
-  grace: { label: '연쇄 보호', max: 1, trigger:'한 연쇄에 실수 1회 허용', description:()=>`한 연쇄에서 줄을 못 지우는 블록을 딱 한 번 허용합니다.`, example:()=>`제거 → 실패 → 제거 → 실패: 마지막 실패에서 연쇄가 끝납니다. 중간에 줄을 지워도 허용 횟수는 회복되지 않습니다.` },
-  charge: { label: '공격 충전', max: 3, trigger:'못 지우면 저장, 지우면 사용', description:r=>`줄을 못 지우면 전하 1개 저장. 다음 줄 제거에 모두 써서 전하당 피해 +${3+r}. 최대 4개 저장.`, example:r=>`전하 3개를 모은 뒤 줄을 지우면 피해 +${3*(3+r)}를 더하고 전하는 0개가 됩니다. 추가 피해에도 보스 방어와 내 공격력 감소가 적용됩니다.` },
-  convert: { label: '연쇄 종료 충전', max: 3, trigger:'3연쇄 이상이 끊겼을 때', description:r=>`3연쇄 이상이 끊기면 전하 ${r}개를 얻습니다. 다음 줄 제거 때 전부 소비해 추가 피해를 줍니다.`, example:r=>`3연쇄든 6연쇄든 종료 시 ${r}개를 얻습니다. 연쇄 보호로 연쇄가 유지되면 아직 발동하지 않습니다. 전하는 최대 4개이며, 공격 충전이 없으면 전하당 피해 +3입니다.` },
-  high: { label: '고층 강화', max: 3, trigger:'지우기 전 높이 12칸 이상', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 12칸 이상이면 줄 제거 피해 +${35*r}%.`, example:()=>`높이는 바닥부터 가장 높은 블록까지 셉니다. 이번에 놓은 블록도 포함합니다. 지운 뒤 높이가 낮아져도 이번 공격에는 적용됩니다.` },
-  low: { label: '저층 강화', max: 3, trigger:'지우기 전 높이 6칸 이하', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 6칸 이하면 줄 제거 피해 +${15*r}%.`, example:()=>`이번 블록을 놓은 뒤 최고 높이가 6칸이면 적용, 7칸이면 미적용입니다. 줄을 지운 뒤의 높이를 기준으로 삼지 않습니다.` },
-  opening: { label: '선제 타격', max: 3, trigger:'전투 첫 두 번의 줄 제거', description:r=>`각 전투의 첫 두 번 줄 제거에 각각 추가 피해: ${6*r} + 해당 구역 보스 기본 체력의 ${r}%. 방어와 피해 감소가 적용됩니다.`, example:r=>`10구역 기본 체력 1600에서는 첫 공격과 두 번째 공격에 각각 +${22*r}. 블록을 놓은 횟수가 아닌 줄을 지운 횟수를 셉니다. 보스 체력 증가 부담으로 추가 피해가 늘지는 않습니다.` },
-  repair: { label: '방해 행 제거', max: 3, trigger:'2~3줄 동시 제거 + 회색 행 존재', description:r=>`2줄 또는 3줄을 동시에 지우면, 가장 아래의 회색 방해 행을 1개 더 없앱니다. 전투당 ${r}회.${r>1?' 다시 발동하려면 블록 6개를 놓아야 합니다.':''}`, example:()=>`추가로 없앤 회색 행에는 공격 피해나 연쇄가 붙지 않습니다. 지울 방해 행이 없으면 사용 횟수를 소비하지 않습니다.` }
+  single: { label: '1줄 강화', category:'attack', max: 3, trigger:'1줄 제거', description:r=>`한 번에 1줄을 지울 때 줄 제거 피해 +${40*r}%.`, example:r=>`다른 효과가 없다면 1줄 피해: 10 → ${Math.floor(10*(1+.4*r)+.5)}.` },
+  middle: { label: '2·3줄 강화', category:'attack', max: 3, trigger:'2~3줄 동시 제거', description:r=>`한 번에 2줄 또는 3줄을 지울 때 줄 제거 피해 +${20*r}%.`, example:r=>`다른 효과가 없다면 2줄 피해: 24 → ${Math.floor(24*(1+.2*r)+.5)}. 1줄과 4줄에는 적용되지 않습니다.` },
+  compress: { label: '4줄 강화', category:'attack', max: 3, trigger:'4줄 동시 제거', description:r=>`한 번에 4줄을 지울 때 줄 제거 피해 +${35*r}%.`, example:r=>`다른 효과가 없다면 4줄 피해: 64 → ${Math.floor(64*(1+.35*r)+.5)}.` },
+  combo: { label: '연쇄 강화', category:'attack', max: 3, trigger:'블록을 놓을 때마다 연속 제거', description:r=>`연쇄 피해 보너스가 단계당 15%에서 ${15+4*r}%로 증가합니다. 6연쇄부터는 더 늘지 않습니다.`, example:r=>`다른 효과가 없다면 1/2/3연쇄의 줄 제거 피해 배율은 100/${115+4*r}/${130+8*r}%입니다. 줄을 못 지우면 연쇄가 끝납니다.` },
+  grace: { label: '연쇄 보호', category:'attack', max: 1, trigger:'한 연쇄에 실수 1회 허용', description:()=>`한 연쇄에서 줄을 못 지우는 블록을 딱 한 번 허용합니다.`, example:()=>`제거 → 실패 → 제거 → 실패: 마지막 실패에서 연쇄가 끝납니다. 중간에 줄을 지워도 허용 횟수는 회복되지 않습니다.` },
+  charge: { label: '공격 충전', category:'attack', max: 3, trigger:'못 지우면 저장, 지우면 사용', description:r=>`줄을 못 지우면 전하 1개 저장. 다음 줄 제거에 모두 써서 전하당 피해 +${3+r}. 최대 4개 저장.`, example:r=>`전하 3개를 모은 뒤 줄을 지우면 피해 +${3*(3+r)}를 더하고 전하는 0개가 됩니다. 추가 피해에도 보스 방어와 내 공격력 감소가 적용됩니다.` },
+  high: { label: '고층 강화', category:'attack', max: 3, trigger:'지우기 전 높이 12칸 이상', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 12칸 이상이면 줄 제거 피해 +${35*r}%.`, example:()=>`높이는 바닥부터 가장 높은 블록까지 셉니다. 이번에 놓은 블록도 포함합니다. 지운 뒤 높이가 낮아져도 이번 공격에는 적용됩니다.` },
+  low: { label: '저층 강화', category:'attack', max: 3, trigger:'지우기 전 높이 6칸 이하', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 6칸 이하면 줄 제거 피해 +${15*r}%.`, example:()=>`이번 블록을 놓은 뒤 최고 높이가 6칸이면 적용, 7칸이면 미적용입니다. 줄을 지운 뒤의 높이를 기준으로 삼지 않습니다.` },
+  opening: { label: '선제 타격', category:'attack', max: 3, trigger:'전투 첫 두 번의 줄 제거', description:r=>`각 전투의 첫 두 번 줄 제거에 각각 추가 피해: ${6*r} + 해당 구역 보스 기본 체력의 ${r}%. 방어와 피해 감소가 적용됩니다.`, example:r=>`10구역 기본 체력 1600에서는 첫 공격과 두 번째 공격에 각각 +${22*r}. 블록을 놓은 횟수가 아닌 줄을 지운 횟수를 셉니다. 보스 체력 증가 부담으로 추가 피해가 늘지는 않습니다.` },
+  guard: { label:'방해 행 차단',max:2,category:'defense',trigger:'공격 예고 01 + 2줄 이상 동시 제거',description:r=>`오른쪽 공격 예고가 01일 때, 이번 블록으로 2줄 이상을 지우면 예정된 회색 방해 행을 1행 막습니다. 전투당 ${r}회.`,example:()=>`예정 2행은 1행으로, 예정 1행은 0행으로 줄입니다. 기존 대응으로 줄인 뒤 추가로 차단하며 실제로 막았을 때만 횟수를 씁니다. 초반 방해 행에는 적용되지 않습니다. 0행이 되어도 보스 공격 번호·체력 회복·페이즈는 정상 진행됩니다.` },
+  landing: { label:'착지 보조',max:2,category:'control',trigger:'블록이 착지했을 때',description:r=>`착지 후 자동 고정까지의 여유가 0.5초에서 ${(500+75*r)/1000}초(${500+75*r}ms)로 늘어납니다. 자연 낙하 속도와 즉시 낙하는 그대로입니다.`,example:r=>`착지한 블록을 옆으로 밀거나 회전할 시간이 ${75*r}ms 늘어납니다. 착지 조작 시간 감소 1레벨을 함께 받았다면 실제 여유는 ${500+75*r-35}ms입니다. 움직임으로 고정 시간을 초기화하는 횟수는 기존처럼 최대 15회입니다.` },
+  repair: { label: '방해 행 제거', category:'defense', max: 3, trigger:'2~3줄 동시 제거 + 회색 행 존재', description:r=>`2줄 또는 3줄을 동시에 지우면, 가장 아래의 회색 방해 행을 1개 더 없앱니다. 전투당 ${r}회.${r>1?' 다시 발동하려면 블록 6개를 놓아야 합니다.':''}`, example:()=>`추가로 없앤 회색 행에는 공격 피해나 연쇄가 붙지 않습니다. 지울 방해 행이 없으면 사용 횟수를 소비하지 않습니다.` }
 };
 
 const BURDENS = {
@@ -112,7 +115,8 @@ const BURDENS = {
   dampen: { label:'내 공격력 감소',max:3,description:r=>`내가 보스에게 주는 모든 피해가 ${4*r}% 감소합니다.`,example:r=>`다른 계산을 마친 피해가 100이라면 최종 피해는 ${100-4*r}입니다.` },
   haste: { label:'보스 공격 간격 단축',max:3,description:r=>`보스가 공격하기까지 놓을 수 있는 블록이 ${r}개 줄어듭니다. 낙하 속도는 그대로입니다.`,example:r=>`원래 블록 9개마다 공격했다면 ${9-r}개마다 공격합니다. 방어 보스의 노출 기회도 달라집니다.` },
   erosion: { label:'초반 방해 행 추가',max:3,description:r=>`각 전투에서 처음 놓는 블록 ${r}개에 각각 회색 방해 행 1개가 추가됩니다.`,example:r=>`전투 시작 후 처음 ${r}개를 놓는 동안 총 ${r}행이 올라옵니다. 일반 보스 공격과 별도로 적용됩니다.` },
-  regen: { label:'보스 체력 회복',max:3,description:r=>`보스가 공격할 때마다 자신의 최대 체력의 ${.5*r}%를 회복합니다.`,example:r=>`최대 체력 1000인 보스는 한 번 공격할 때 ${5*r}을 회복합니다. 초반 방해 행 추가으로 행이 올라올 때에는 회복하지 않습니다.` },
+  regen: { label:'보스 체력 회복',max:3,description:r=>`보스가 공격할 때마다 자신의 최대 체력의 ${.5*r}%를 회복합니다.`,example:r=>`최대 체력 1000인 보스는 한 번 공격할 때 ${5*r}을 회복합니다. 초반 방해 행이 올라올 때에는 회복하지 않습니다.` },
+  reinforcement: { label:'주기적 증원',max:1,description:()=>`보스가 3번 공격할 때마다 회색 방해 행이 1행 더 올라옵니다(3·6·9·12번째…). 추가 행도 같은 공격 묶음의 빈칸 위치를 따릅니다.`,example:()=>`기본 공격이 2행이면 세 번째 공격은 3행입니다. 공격 예고에 미리 반영되며 대응과 방해 행 차단으로 줄일 수 있습니다. 전투마다 공격 번호는 1부터 다시 셉니다. 초반 방해 행은 공격 횟수에 포함하지 않습니다.` },
   rigidity: { label:'착지 조작 시간 감소',max:3,description:r=>`착지한 블록이 자동으로 굳기까지의 시간이 500ms에서 ${500-35*r}ms로 줄어듭니다.`,example:()=>`바닥에서 옆으로 밀거나 회전시킬 시간이 줄어듭니다. 즉시 낙하의 동작은 그대로입니다.` }
 };
 
@@ -214,7 +218,7 @@ class Game {
       tags:Array(HEIGHT).fill(null), active:null, queue:[], held:null, canHold:true,
       upgrades:rankMap(UPGRADES), burdens:rankMap(BURDENS), offers:[],
       stats:{locks:0,lines:0,damage:0,seconds:0,cleared:0,maxCombo:0},
-      combo:0,charge:0,repairLeft:0,reason:'',death:null,tick:0,history:[]
+      combo:0,charge:0,repairLeft:0,guardLeft:0,lockDelayMs:500,reason:'',death:null,tick:0,history:[]
     };
     this._beginStage();
     if(startStage>1){
@@ -263,9 +267,9 @@ class Game {
     const hp=round(cfg.hp*(1+0.08*s.burdens.vitality));
     s.boss={hp,maxHp:hp,phase:1,pendingPhase:1,K:0,remaining:0,stageLocks:0,
       attackIndex:0,holes:[],exposed:false,armor:false,windowActive:false,
-      responseLines:0,overload:0,phaseElapsed:0,obscureRemaining:0,obscureCooldown:0};
-    s.combo=0;s.charge=0;s.repairLeft=s.upgrades.repair;s.offers=[];s.canHold=true;
-    this._graceUsed=false;this._lastClear=0;this._clears=0;this._repairAt=-Infinity;
+      responseLines:0,overload:0,guardReady:false,reinforcement:false,reinforcementBonus:0,reinforcementEvery:0,phaseElapsed:0,obscureRemaining:0,obscureCooldown:0};
+    s.combo=0;s.charge=0;s.repairLeft=s.upgrades.repair;s.guardLeft=s.upgrades.guard;s.offers=[];s.canHold=true;
+    this._graceUsed=false;this._clears=0;this._repairAt=-Infinity;
     const er=rng(this.seed+':erosion:'+s.stage);
     this._erosionHoles=Array.from({length:3},()=>Math.floor(er()*10));
     s.erosionHoles=this._erosionHoles.slice(0,s.burdens.erosion);
@@ -279,7 +283,10 @@ class Game {
   _planCycle() {
     const s=this.state,b=s.boss,cfg=this._config();
     b.K=Math.max(4,cfg.K-s.burdens.haste);b.remaining=b.K;b.responseLines=0;
-    const hole=this._newHole(),rows=cfg.rows+this._overload(b.stageLocks+b.K);
+    b.reinforcementEvery=s.burdens.reinforcement?3:0;
+    b.reinforcement=!!b.reinforcementEvery&&(b.attackIndex+1)%b.reinforcementEvery===0;
+    b.reinforcementBonus=b.reinforcement?1:0;
+    const hole=this._newHole(),rows=cfg.rows+this._overload(b.stageLocks+b.K)+b.reinforcementBonus;
     this._plannedHoles=Array(rows).fill(hole);
     this._refreshBoss();
   }
@@ -292,6 +299,8 @@ class Game {
     b.response=cfg.response;b.stagger=false;
     b.overload=this._overload(b.stageLocks);
     b.nextAttackAt=b.stageLocks+b.remaining;
+    b.guardReady=b.remaining===1&&this.state.guardLeft>0;
+    this.state.lockDelayMs=500+75*this.state.upgrades.landing-35*this.state.burdens.rigidity;
     const reduction=cfg.response&&b.responseLines>=2?1:0;
     b.holes=this._plannedHoles.slice(0,Math.max(1,this._plannedHoles.length-reduction));
     b.erosionRemaining=Math.max(0,this.state.burdens.erosion-b.stageLocks);
@@ -349,7 +358,7 @@ class Game {
     }
     if (this._collides({...s.active,y:s.active.y+1})) {
       this._lockTime+=dt;
-      if (this._lockTime+1e-10 >= (500-35*s.burdens.rigidity)/1000) this._lock();
+      if (this._lockTime+1e-10 >= (500+75*s.upgrades.landing-35*s.burdens.rigidity)/1000) this._lock();
     } else if (this._lockResets<15) this._lockTime=0;
   }
   _deleteRepair(board,tags,offset=0) {
@@ -389,14 +398,14 @@ class Game {
       s.stats.maxCombo=Math.max(s.stats.maxCombo,s.combo);
       const Q=s.charge;s.charge=0;
       const A=(L===1?.40*u.single:0)+((L===2||L===3)?.20*u.middle:0)
-        +(L===4?.35*u.compress:0)+(L===4&&this._lastClear===4?.25*u.repeat:0)
+        +(L===4?.35*u.compress:0)
         +(height>=12?.35*u.high:0)+(height<=6?.15*u.low:0);
       const M=1+(.15+.04*u.combo)*Math.min(s.combo-1,5);
       const O=this._clears<2?(6+STAGES[s.stage-1].hp*.01)*u.opening:0;
       const cfg=this._config();
       const armor=cfg.armor?(b.remaining<=Math.min(cfg.E,b.K-1)?1.35:.65):1;
-      const damage=round((([0,10,24,42,64][L]*(1+A)*M)+Q*(u.charge?3+u.charge:3)+O)*armor*(1-.04*s.burdens.dampen));
-      this._clears++;this._lastClear=L;
+      const damage=round((([0,10,24,42,64][L]*(1+A)*M)+Q*(3+u.charge)+O)*armor*(1-.04*s.burdens.dampen));
+      this._clears++;
       if(cfg.response&&b.remaining<=Math.min(3,b.K-1))b.responseLines+=L;
       const hpBefore=b.hp;b.hp=Math.max(0,b.hp-damage);
       s.stats.damage+=hpBefore-b.hp;
@@ -407,10 +416,11 @@ class Game {
     } else {
       if(u.charge)s.charge=Math.min(4,s.charge+1);
       if(s.combo>0) {
-        if(u.grace&&!this._graceUsed)this._graceUsed=true;
-        else {
-          if(u.convert&&s.combo>=3)s.charge=Math.min(4,s.charge+u.convert);
-          s.combo=0;this._graceUsed=false;
+        if(u.grace&&!this._graceUsed){
+          this._graceUsed=true;this._emit('comboProtected',{combo:s.combo});
+        }else {
+          const ended=s.combo;s.combo=0;this._graceUsed=false;
+          this._emit('comboEnded',{combo:ended});
         }
       }
     }
@@ -423,7 +433,11 @@ class Game {
     b.remaining--;
     if(b.remaining===0) {
       this._refreshBoss();
-      const holes=b.holes.slice();
+      let holes=b.holes.slice();
+      if(L>=2&&s.guardLeft>0&&holes.length){
+        holes=holes.slice(0,-1);s.guardLeft--;b.holes=holes.slice();
+        this._emit('guard',{rows:1,remainingUses:s.guardLeft,holes:holes.slice()});
+      }
       const alive=this._insertRows(holes);
       let regen=0;
       if(s.burdens.regen&&b.hp>0) {
@@ -431,7 +445,7 @@ class Game {
         const next=Math.min(cap,b.hp+round(b.maxHp*.005*s.burdens.regen));
         regen=Math.max(0,next-b.hp);b.hp+=regen;
       }
-      this._emit('bossAttack',{holes,regen});
+      this._emit('bossAttack',{holes,regen,reinforcement:b.reinforcement});
       if(!alive)return;
       b.attackIndex++;
       const nextPhase=Math.max(b.phase,b.pendingPhase);
@@ -473,8 +487,14 @@ class Game {
   _makeOffers() {
     const s=this.state;
     const upgrades=Object.keys(UPGRADES).filter(k=>s.upgrades[k]<UPGRADES[k].max);
-    const burdens=Object.keys(BURDENS).filter(k=>s.burdens[k]<3);
-    const us=shuffle(upgrades,this._rewards).slice(0,3), bs=shuffle(burdens,this._rewards);
+    const burdens=Object.keys(BURDENS).filter(k=>s.burdens[k]<BURDENS[k].max);
+    const attacks=shuffle(upgrades.filter(k=>UPGRADES[k].category==='attack'),this._rewards);
+    const support=shuffle(upgrades.filter(k=>UPGRADES[k].category!=='attack'),this._rewards);
+    const selected=[];
+    if(attacks.length)selected.push(attacks[0]);
+    if(support.length)selected.push(support[0]);
+    selected.push(...shuffle(upgrades.filter(k=>!selected.includes(k)),this._rewards).slice(0,3-selected.length));
+    const us=shuffle(selected,this._rewards),bs=shuffle(burdens,this._rewards);
     return us.map((upgrade,i)=>({upgrade,burden:bs[i%bs.length]}));
   }
   // All presentation timers advance only with active simulation time.
@@ -511,7 +531,7 @@ class Game {
     const s=this.state;
     if(!['reward','rebuild'].includes(s.status)||!Number.isInteger(index)||!s.offers[index])return false;
     const offer=s.offers[index];
-    if(s.upgrades[offer.upgrade]>=UPGRADES[offer.upgrade].max||s.burdens[offer.burden]>=3)return false;
+    if(s.upgrades[offer.upgrade]>=UPGRADES[offer.upgrade].max||s.burdens[offer.burden]>=BURDENS[offer.burden].max)return false;
     s.upgrades[offer.upgrade]++;s.burdens[offer.burden]++;
     s.history.push({stage:s.status==='rebuild'?s.rebuildStep:s.stage,...offer,rebuild:s.status==='rebuild'});
     if(s.status==='rebuild'){
@@ -760,7 +780,8 @@ class Effects {
     this.recoil={x:0,y:0}; this.velocity={x:0,y:0};
     this.flash=0; this.death=0; this.victoryAt=null; this.readyAt=null;
     this.attacks=[]; this.repairs=[]; this.numbers=[];
-    this.bossPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
+    this.bossPulse=0; this.guardPulse=0; this.target=null; this.cursor=0; this.reducedMotion=false;
+    this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
     for(const p of this.pool)p.active=false;
   }
   consume(events) {
@@ -772,16 +793,26 @@ class Effects {
         this.lastSeq=e.seq;
       }
       if(e.type==='clear' && Array.isArray(e.rows) && e.rows.length) {
+        // The success counter changes at removal, never at a delayed impact.
+        this.comboFeedback={count:e.combo||1,lines:e.lines,kind:'active',changedAt:this.time,noticeAt:-Infinity};
         const copy={...e,rows:e.rows.map(r=>({row:r.row,colors:[...(r.colors||[])]}))};
         this.attacks.push({event:copy,born:this.time,impacted:false,impactPoint:null});
         if(this.attacks.length>64) {
           const removable=this.attacks.findIndex(a=>!a.event.killed && a.impacted);
           this.attacks.splice(removable>=0?removable:0,1);
         }
-        this.audio?.play?.('clear',clamp(e.lines/4,.25,1));
+        this.audio?.play?.('clear',clamp(e.lines/4,.25,1),{combo:e.combo||1});
         if(e.killed && this.victoryAt===null) {
           this.victoryAt=this.time; this.readyAt=this.time+.4;
         }
+      } else if(e.type==='comboProtected') {
+        this.comboFeedback={...this.comboFeedback,count:e.combo,kind:'protected',noticeAt:this.time};
+      } else if(e.type==='comboEnded') {
+        this.comboFeedback={count:0,endedCount:e.combo,lines:0,kind:'ended',changedAt:this.time,noticeAt:this.time};
+      } else if(e.type==='stageClear'||e.type==='death') {
+        this.comboFeedback={count:0,lines:0,kind:'idle',changedAt:this.time,noticeAt:-Infinity};
+      } else if(e.type==='guard') {
+        this.guardPulse=1;
       } else if(e.type==='bossAttack') {
         this.bossPulse=1;
         this.audio?.play?.('boss',1);
@@ -799,6 +830,7 @@ class Effects {
     [this.recoil.y,this.velocity.y]=damp(this.recoil.y,this.velocity.y,dt);
     this.flash*=Math.exp(-22*dt);
     this.bossPulse*=Math.exp(-11*dt);
+    this.guardPulse*=Math.exp(-8*dt);
     for(const p of this.pool)if(p.active) {
       p.age+=dt;if(p.age>=p.life)p.active=false;
     }
@@ -844,6 +876,38 @@ class Effects {
       size:1.4+rand(seed*3+i)*2.4,color:i%3===0?IVORY:AMBER,
       ox:origin?.x??null,oy:origin?.y??null});
   }
+  drawCombo(ctx,position={x:490,y:185},options={}) {
+    const c=this.comboFeedback;
+    if(!ctx||!c||c.kind==='idle')return;
+    const {x,y}=position,age=Math.max(0,this.time-c.changedAt),noticeAge=this.time-c.noticeAt;
+    ctx.save();ctx.globalCompositeOperation='source-over';ctx.textAlign='center';
+    const label=(value,yy,size,color=CYAN)=>{ctx.fillStyle=color;ctx.font=`500 ${size}px GameMono,Consolas,monospace`;ctx.fillText(value,x,yy);};
+    if(c.kind==='ended'){
+      if(noticeAge<1.1){
+        ctx.globalAlpha=clamp((1.1-noticeAge)/.4);
+        label('연쇄 종료',y+20,12,'#9aaeb9');label(`${c.endedCount}연쇄`,y+42,15,'#9aaeb9');
+      }
+      ctx.restore();return;
+    }
+    const milestone=c.count===3||c.count===6;
+    if(milestone&&age<.35&&!options.reducedMotion){
+      ctx.globalAlpha=(1-age/.35)*.65;ctx.strokeStyle=c.count>=6?AMBER:CYAN;ctx.lineWidth=1;
+      ctx.strokeRect(x-44,y-14,88,101);ctx.globalAlpha=1;
+    }
+    label('COMBO',y,10,'#9bb5c0');
+    if(c.count===1){label('연쇄 시작',y+32,13);}
+    else{
+      const pop=!options.reducedMotion&&age<.14?1+.14*Math.sin(Math.PI*age/.14):1;
+      ctx.save();ctx.translate(x,y+35);ctx.scale(pop,pop);
+      ctx.fillStyle=c.count>=6?AMBER:CYAN;ctx.font=`700 ${c.count>=100?28:36}px GameMono,Consolas,monospace`;
+      ctx.fillText(String(c.count),0,0);ctx.restore();
+      label(`${c.count}연쇄`,y+52,11,'#bed1d8');
+    }
+    if(c.kind==='protected'&&noticeAge<1.1)label('연쇄 보호 사용',y+70,10,AMBER);
+    else if(c.count>=6)label('연쇄 보너스 최대',y+70,9,AMBER);
+    else if(c.lines)label(`${c.lines}줄 제거`,y+70,10,'#96b0be');
+    ctx.restore();
+  }
   draw(ctx,layout,target,options={}) {
     const b=layout?.board;
     if(!ctx||!b||!target)return;
@@ -864,6 +928,11 @@ class Effects {
     if(this.bossPulse>.015) {
       ctx.globalAlpha=this.bossPulse*.45;ctx.strokeStyle=AMBER;ctx.lineWidth=2;
       ctx.strokeRect(b.x-3,b.y-3,cell*10+6,cell*20+6);
+    }
+    if(this.guardPulse>.015){
+      ctx.globalAlpha=this.guardPulse*.8;ctx.strokeStyle=CYAN;ctx.lineWidth=reduced?2:3;
+      const yy=b.y+cell*20+2;
+      ctx.beginPath();ctx.moveTo(b.x,yy);ctx.lineTo(b.x+cell*10,yy);ctx.stroke();
     }
     ctx.globalCompositeOperation='lighter';
     for(const a of this.attacks.slice(-6)) {
@@ -946,14 +1015,18 @@ class AudioDirector {
   }
   setEnabled(value){this.enabled=value;if(!value)this.stop();else this.unlock();}
   stop(){for(const v of this.voices){try{v.stop();}catch{}}this.voices=[];}
-  play(kind,power=1){
+  play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
     this.voices=this.voices.filter(v=>!v._finished);
     while(this.voices.length>=4){try{this.voices.shift().stop();}catch{}}
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
     let duration=.06,volume=.10,from=160,to=80;
-    if(kind==='clear'){from=600;to=1000;duration=.055;volume=.035;}
+    if(kind==='clear'){
+      const combo=Math.min(6,Math.max(1,options.combo||1));
+      const semitones=combo>=6?7:combo>=3?4:combo>=2?2:0,ratio=2**(semitones/12);
+      from=600*ratio;to=1000*ratio;duration=combo===3||combo===6?.07:.055;volume=.035;
+    }
     if(kind==='hit'){from=180-p*20;to=55;duration=.09+p*.025;volume=.12+p*.018;}
     if(kind==='boss'){from=72;to=35;duration=.18;volume=.21;}
     if(kind==='lock'){from=130;to=70;duration=.035;volume=.055;}
@@ -1012,6 +1085,8 @@ const fmtTime=n=>`${Math.floor(n/60).toString().padStart(2,'0')}:${Math.floor(n%
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
 const count=o=>Object.values(o).reduce((a,b)=>a+b,0);
+const ROLE_LABELS={attack:'공격',defense:'방어',control:'조작'};
+function roleTag(def){return `<span class="ability-role role-${def.category||'attack'}">${ROLE_LABELS[def.category]||'공격'}</span>`;}
 const getGame=()=>game;
 
 function toast(text){$('toast').textContent=text;$('toast').classList.add('show');toastUntil=performance.now()+2200;}
@@ -1037,6 +1112,8 @@ function randomSeed(){try{const n=new Uint32Array(1);crypto.getRandomValues(n);r
 function startRun(seed,options={}){
   const value=(seed??$('seedInput').value).trim()||randomSeed();
   resetReview();game=new Game(value,options);fx.reset(game.state.stage);saved=false;paused=false;previousStatus=game.state.status;recordedActions=[];choiceLocked=false;
+  $('toast').classList.remove('show');toastUntil=0;
+  $('liveStatus').textContent=game.state.status==='rebuild'?`${game.state.stage}구역 재도전 준비`: `${game.state.stage}구역 전투 시작`;
   pendingHp=[];hpTrail=game.state.boss?.maxHp||0;clearInput();closeModal();$('startScreen').hidden=true;
   audio.unlock();updateUi();
   if(game.state.status==='rebuild'){paused=true;showReward();}else canvas.focus({preventScroll:true});
@@ -1061,6 +1138,8 @@ function onEvents(events){
     if(e.type==='bossAttack'&&e.regen)hpTrail=Math.max(hpTrail,game.state.boss.hp);
     if(e.type==='death'){$('liveStatus').textContent=e.reason;beginDeathReview();}
     if(e.type==='stageClear')$('liveStatus').textContent=`${e.stage}구역 돌파`;
+    if(e.type==='guard'){const message=`방해 1행 차단 · 남은 ${e.remainingUses}회`;toast(message);$('liveStatus').textContent=message;}
+    if(e.type==='comboProtected')$('liveStatus').textContent='연쇄 보호를 사용했습니다. 연쇄는 유지됩니다.';
     if(e.type==='phaseChange'){
       const message=`최종 보스 ${e.phase}페이즈 · ${PHASE_NAMES[e.phase]}${e.phase===2?' — 간헐적 진동':e.phase===3?' — 다음 블록이 잠시 가려집니다':''}`;
       toast(message);$('liveStatus').textContent=message;
@@ -1097,7 +1176,7 @@ function choiceCards(s,next){
     const ur=s.upgrades[o.upgrade]+1,br=s.burdens[o.burden]+1;
     const burdens={...s.burdens,[o.burden]:br},hp=Math.floor(next.hp*(1+.08*burdens.vitality)+.5),K=Math.max(4,next.K-burdens.haste);
     const u=UPGRADES[o.upgrade],risk=BURDENS[o.burden];
-    return `<article class="reward-card" aria-labelledby="reward-title-${i}"><div class="card-index">CHOICE 0${i+1}</div><div class="effect-heading buff-heading">＋ 버프 · 유리한 효과 <span>Lv.${s.upgrades[o.upgrade]} → ${ur}</span></div><h3 id="reward-title-${i}">${esc(u.label)}</h3><span class="condition-tag">${esc(u.trigger)}</span><p class="card-description">${esc(u.description(ur))}</p><details class="effect-comparison"><summary>현재 효과와 비교</summary><p>현재: ${s.upgrades[o.upgrade]?esc(u.description(s.upgrades[o.upgrade])):'미보유'}</p><p>선택 후: ${esc(u.description(ur))}</p></details>${example(u,ur)}<div class="burden-block"><div class="effect-heading debuff-heading">− 디버프 · 함께 받는 불이익 <span>Lv.${s.burdens[o.burden]} → ${br}</span></div><h4>${esc(risk.label)}</h4><p>${esc(risk.description(br))}</p><details class="effect-comparison"><summary>현재 불이익과 비교</summary><p>현재: ${s.burdens[o.burden]?esc(risk.description(s.burdens[o.burden])):'미보유'}</p><p>선택 후: ${esc(risk.description(br))}</p></details>${example(risk,br)}</div><div class="card-preview">${s.status==='rebuild'?'시작':'다음'} 보스 HP ${hp.toLocaleString()} · 공격 간격 ${K}블록<br>초반 방해 ${burdens.erosion}행 · 내 피해 ×${(1-.04*burdens.dampen).toFixed(2)}</div><button class="pick-label" type="button" data-choice="${i}">버프와 디버프 함께 획득 <span>↗</span></button></article>`;
+    return `<article class="reward-card" aria-labelledby="reward-title-${i}"><div class="card-index">CHOICE 0${i+1}</div><div class="effect-heading buff-heading">＋ 버프 · 유리한 효과 <span>Lv.${s.upgrades[o.upgrade]} → ${ur}</span></div><div class="ability-title">${roleTag(u)}<h3 id="reward-title-${i}">${esc(u.label)}</h3></div><span class="condition-tag">${esc(u.trigger)}</span><p class="card-description">${esc(u.description(ur))}</p><details class="effect-comparison"><summary>현재 효과와 비교</summary><p>현재: ${s.upgrades[o.upgrade]?esc(u.description(s.upgrades[o.upgrade])):'미보유'}</p><p>선택 후: ${esc(u.description(ur))}</p></details>${example(u,ur)}<div class="burden-block"><div class="effect-heading debuff-heading">− 디버프 · 함께 받는 불이익 <span>Lv.${s.burdens[o.burden]} → ${br}</span></div><h4>${esc(risk.label)}</h4><p>${esc(risk.description(br))}</p><details class="effect-comparison"><summary>현재 불이익과 비교</summary><p>현재: ${s.burdens[o.burden]?esc(risk.description(s.burdens[o.burden])):'미보유'}</p><p>선택 후: ${esc(risk.description(br))}</p></details>${example(risk,br)}</div><div class="card-preview">${s.status==='rebuild'?'시작':'다음'} 보스 HP ${hp.toLocaleString()} · 공격 간격 ${K}블록<br>초반 방해 ${burdens.erosion}행 · 내 피해 ×${(1-.04*burdens.dampen).toFixed(2)}<br>착지 조작 여유 ${(500+75*((s.upgrades.landing||0)+(o.upgrade==='landing'?1:0))-35*burdens.rigidity)/1000}초${burdens.reinforcement?'<br>매 3번째 공격에 방해 +1행':''}</div><button class="pick-label" type="button" data-choice="${i}">버프와 디버프 함께 획득 <span>↗</span></button></article>`;
   }).join('');
 }
 function showReward(){
@@ -1106,7 +1185,7 @@ function showReward(){
   modal(`<div class="choice-page"><div class="reward-top"><div><p class="modal-eyebrow">${rebuilding?`REBUILD / 능력 선택 ${s.rebuildStep} OF ${s.rebuildTotal}`:`SECTOR ${pad(s.stage)} CLEARED / 선택 ${count(s.upgrades)+1} OF 9`}</p><h2>${rebuilding?`${target}구역 재도전 준비`:'다음 전투를 위한 선택'}</h2><p class="modal-copy">${rebuilding?`이전 능력은 초기화되었습니다. ${s.rebuildTotal}번의 보상을 하나씩 다시 선택하세요.`:'버프 하나와 디버프 하나를 함께 받습니다. 이전 선택은 계속 유지됩니다.'}</p></div><div class="reward-next">${rebuilding?'START':'NEXT'} ${pad(target)} / ${next.name}<br>${target===10?'최종 보스 · 관측 / 붕괴 / 일식':'전투는 빈 보드에서 시작합니다'}</div></div>${progress}<div class="choice-toolbar"><button type="button" data-ui="reroll" ${s.rerollsLeft?'':'disabled'}>${s.rerollsLeft?'선택지 새로고침 · 무료 1/1':'새로고침 사용 완료 · 0/1'}</button><span>세 카드의 버프·디버프 조합을 함께 다시 추첨합니다.</span></div>${glossary()}<div class="reward-grid">${choiceCards(s,next)}</div><p class="section-caption">현재까지 선택한 능력</p><div class="loadout-summary">${tags(s)||'<span class="note">아직 선택한 능력이 없습니다.</span>'}</div><p class="note">① ② ③ 키로 선택 · 매 선택 화면에서 새로고침 1회 · SEED ${esc(game.seed)}</p>${rebuilding?'<div class="modal-actions"><button data-ui="home">준비를 그만두고 처음으로</button></div>':''}</div>`,rebuilding?'rebuild':'reward');
 }
 function buildItems(s){
-  return [[UPGRADES,s.upgrades,false],[BURDENS,s.burdens,true]].map(([defs,levels,bad])=>Object.entries(levels).filter(([,r])=>r).map(([k,r])=>`<div class="build-item${bad?' bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프':'＋ 버프'} · Lv.${r}</span><strong>${esc(defs[k].label)}</strong><p>${esc(defs[k].description(r))}</p>${example(defs[k],r)}</div>`).join('')).join('');
+  return [[UPGRADES,s.upgrades,false],[BURDENS,s.burdens,true]].map(([defs,levels,bad])=>Object.entries(levels).filter(([,r])=>r).map(([k,r])=>`<div class="build-item${bad?' bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프':'＋ 버프'} · Lv.${r}</span>${bad?'':roleTag(defs[k])}<strong>${esc(defs[k].label)}</strong><p>${esc(defs[k].description(r))}</p>${example(defs[k],r)}</div>`).join('')).join('');
 }
 function showPrepared(){
   const s=game.state;
@@ -1115,9 +1194,10 @@ function showPrepared(){
 function saveRecord(){
   if(saved)return;saved=true;const s=game.state;
   const row={seed:game.seed,mode:s.mode||'standard',startStage:s.startStage||1,stage:s.stage,cleared:s.stats.cleared,progress:s.status==='won'?1:1-s.boss.hp/s.boss.maxHp,locks:s.stats.locks,seconds:s.stats.seconds,lines:s.stats.lines,version:RULES_VERSION,at:Date.now()};
-  const old=readStore(KEY,[]);const list=(Array.isArray(old)?old:[]).filter(x=>x.version===RULES_VERSION);list.push(row);
+  const old=readStore(KEY,[]);const list=(Array.isArray(old)?old:[]).filter(x=>x&&typeof x==='object');list.push(row);
   list.sort((a,b)=>b.cleared-a.cleared||b.progress-a.progress||a.locks-b.locks||a.seconds-b.seconds);
-  writeStore(KEY,['standard','assisted'].flatMap(mode=>list.filter(r=>(r.mode||'standard')===mode).slice(0,20)));
+  const versions=[...new Set(list.map(r=>r.version))];
+  writeStore(KEY,versions.flatMap(version=>['standard','assisted'].flatMap(mode=>list.filter(r=>r.version===version&&(r.mode||'standard')===mode).slice(0,20))));
 }
 function showResult(){
   const s=game.state,won=s.status==='won',target=Math.max(1,s.stage-1),assisted=s.mode==='assisted';saveRecord();
@@ -1131,15 +1211,16 @@ const GUIDE_NOTES={
   single:'두 번에 걸쳐 1줄씩 지워도 각각 적용됩니다. 한 번에 2줄을 지우면 적용되지 않습니다.',
   middle:'2줄과 3줄을 한 번에 지우는 정리형 플레이에 적합합니다. 1줄·4줄 공격은 강화하지 않습니다.',
   compress:'한 번에 4줄을 지워야 합니다. 1줄을 네 번 지우는 것으로는 발동하지 않습니다.',
-  repeat:'적용: 4줄 → 못 지움 → 4줄. 미적용: 4줄 → 1줄 → 4줄. 연쇄와 달리 중간의 비제거는 허용됩니다.',
   combo:'연쇄는 블록 하나를 놓을 때마다 이어서 줄을 지우는 것입니다. 1줄 → 1줄 → 2줄 제거도 3연쇄입니다. 6연쇄 이후에도 연쇄는 이어지지만 피해 배율은 더 오르지 않습니다.',
   grace:'제거 → 실패 → 제거 → 실패라면 마지막 실패에서 끝납니다. 중간에 줄을 지워도 보호 횟수는 회복되지 않습니다.',
   charge:'전하 3개를 모아 공격하면 3개를 모두 소비합니다. 전하는 구역을 넘길 때 초기화되고, 추가 피해도 보스 방어와 내 공격력 감소의 영향을 받습니다.',
-  convert:'연쇄 보호가 실패를 막아줬다면 아직 연쇄가 끝난 것이 아니므로 발동하지 않습니다. 공격 충전이 없어도 사용할 수 있고, 그때는 전하당 피해 3입니다.',
   high:'이번에 놓은 블록까지 포함해 바닥부터 최고 높이를 셉니다. 줄이 사라진 뒤 낮아져도 이번 공격에는 적용됩니다.',
   low:'배치 후 높이 8칸에서 4줄을 지워 4칸이 되어도 이번 공격에는 적용되지 않습니다. 지우기 전부터 6칸 이하여야 합니다.',
   opening:'첫 두 블록이 아니라 첫 두 번의 줄 제거입니다. 기본 체력은 보스 체력 증가 디버프를 적용하기 전 수치이며, 추가 피해에도 방어와 내 공격력 감소가 적용됩니다.',
   repair:'회색 방해 행이 남아 있을 때만 사용 횟수를 소비합니다. 추가 제거는 피해·연쇄·제거 줄 수를 늘리지 않습니다. 2레벨부터 재사용 사이에 블록 6개를 더 놓아야 합니다.',
+  guard:'오른쪽 공격 예고가 02 이상이거나, 이번 블록으로 1줄만 지웠다면 발동하지 않습니다. 이미 올라온 회색 행을 지우는 능력이 아닙니다. 보스 공격 직전에 줄을 지워 예정 방해를 2행에서 1행으로 줄였다면, 이 능력이 그 1행도 막아 0행으로 만듭니다. 0행까지 막아도 공격 번호·보스 회복·페이즈 진행은 유지됩니다.',
+  landing:'착지한 뒤 움직이거나 회전할 시간을 늘립니다. 자연 낙하 속도는 바뀌지 않고, 즉시 낙하를 누르면 여전히 바로 고정됩니다. 착지 조작 시간 감소와 함께 선택하면 두 효과를 합친 최종 시간을 표시합니다.',
+  reinforcement:'이 전투의 세 번째·여섯 번째·아홉 번째처럼 세 번마다 적용됩니다. 첫 번째·두 번째 공격과 초반 방해 행 추가에는 적용되지 않습니다. 다음 구역에서는 번호가 1부터 다시 시작합니다. 추가 행도 방어 능력으로 막을 수 있습니다.',
   vitality:'현재 공격 간격은 바뀌지 않습니다. 보스가 더 많은 피해를 받아야 쓰러지므로 전투가 길어질 수 있습니다.',
   dampen:'줄 제거 피해뿐 아니라 전하와 선제 타격의 추가 피해에도 적용됩니다.',
   haste:'예를 들어 원래 9블록마다 공격했다면 1레벨은 8블록마다 공격합니다. 블록 낙하 속도는 바뀌지 않습니다.',
@@ -1150,9 +1231,9 @@ const GUIDE_NOTES={
 function showGuide(section=guideSection){
   guideSection=section;if(game?.state.status==='playing')paused=true;
   const defs=section==='debuffs'?BURDENS:UPGRADES,bad=section==='debuffs';
-  const cards=Object.entries(defs).map(([key,def])=>`<article class="guide-card ${bad?'bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프 · 불이익':'＋ 버프 · 유리한 효과'}</span><h3>${esc(def.label)}</h3>${def.trigger?`<p class="guide-trigger">발동 조건 · ${esc(def.trigger)}</p>`:''}<div class="guide-levels">${Array.from({length:def.max},(_,i)=>`<p><b>Lv.${i+1}</b> ${esc(def.description(i+1))}</p>`).join('')}</div><div class="guide-example"><b>구체적인 예시 · 1레벨 기준</b><p>${esc(def.example?.(1)||'')}</p></div><p class="guide-note"><b>알아두기</b><br>${esc(GUIDE_NOTES[key]||'')}</p></article>`).join('');
-  const rules=`<div class="guide-rules"><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>보스를 쓰러뜨릴 때마다 세 카드 중 하나를 고릅니다. 선택한 두 효과는 다음 구역부터 함께 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>연쇄와 전하</h3><p>블록을 놓을 때마다 줄을 지우면 연쇄가 이어집니다. 기본 피해 배율은 1·2·3연쇄에 100·115·130%입니다. 전하는 다음 줄 제거에 모두 쓰는 추가 공격 자원이며 최대 4개입니다.</p></article><article><h3>피해와 높이 판정</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 4줄 강화와 4줄 재공격 같은 피해 보너스는 합산하고, 연쇄 배율은 별도로 곱합니다. 높이는 이번 블록을 놓은 뒤, 줄이 사라지기 전에 판정합니다.</p></article><article><h3>회색 방해 행</h3><p>한 번의 공격으로 2~3행이 올라오면 그 묶음의 빈칸은 같은 열입니다. 다음 공격은 다시 랜덤이며, 운이 좋으면 같은 열이 계속 나올 수도 있습니다. 보드 오른쪽에서 실제로 올라올 모양을 미리 확인하세요.</p></article><article><h3>죽어도 다시 빌드를 만들 수 있습니다</h3><p>5구역에서 죽었다면 4구역부터 재도전할 수 있습니다. 이전 능력은 지우고, 1~3구역 보상에 해당하는 세 번의 선택으로 새 조합을 만든 뒤 전투를 시작합니다. 각 선택 화면마다 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
-  modal(`<div class="guide-header"><div><p class="modal-eyebrow">FIELD GUIDE / VER 2.0.0</p><h2>버프 · 디버프 도감</h2><p class="modal-copy">조건부터 예외까지 읽고, 원하는 조합을 찾아보세요.</p></div><button data-ui="guideClose" type="button">${game?.state.status==='playing'?'전투로 돌아가기':'닫기'}</button></div><nav class="guide-tabs" aria-label="도감 분류"><button data-guide="buffs" aria-pressed="${section==='buffs'}">버프 ${Object.keys(UPGRADES).length}개</button><button data-guide="debuffs" aria-pressed="${section==='debuffs'}">디버프 ${Object.keys(BURDENS).length}개</button><button data-guide="rules" aria-pressed="${section==='rules'}">기본 규칙과 재도전</button></nav>${section==='rules'?rules:`<div class="guide-grid">${cards}</div>`}<div class="modal-actions"><button class="primary" data-ui="guideClose">${game?.state.status==='playing'?'전투로 돌아가기':'처음 화면으로'}</button></div>`,'guide');
+  const cards=Object.entries(defs).map(([key,def])=>`<article class="guide-card ${bad?'bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프 · 불이익':'＋ 버프 · 유리한 효과'}</span>${bad?'':roleTag(def)}<h3>${esc(def.label)}</h3>${def.trigger?`<p class="guide-trigger">발동 조건 · ${esc(def.trigger)}</p>`:''}<div class="guide-levels">${Array.from({length:def.max},(_,i)=>`<p><b>Lv.${i+1}</b> ${esc(def.description(i+1))}</p>`).join('')}</div><div class="guide-example"><b>구체적인 예시 · 1레벨 기준</b><p>${esc(def.example?.(1)||'')}</p></div><p class="guide-note"><b>알아두기</b><br>${esc(GUIDE_NOTES[key]||'')}</p></article>`).join('');
+  const rules=`<div class="guide-rules"><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>세 카드 중 하나를 선택하면 좋은 효과와 불이익을 함께 받습니다. 다음 구역부터 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>공격 · 방어 · 조작</h3><p>공격은 보스에게 주는 피해를, 방어는 회색 행을 막거나 지우는 능력을, 조작은 착지 후 움직일 여유를 늘립니다. 선택 가능한 후보가 있으면 공격 1장과 방어·조작 중 1장을 포함합니다. 세 번째는 자유롭게 추첨합니다.</p></article><article><h3>2줄 제거와 2 COMBO는 다릅니다</h3><p>한 블록으로 한 번에 2줄을 지우면 ‘2줄 제거’입니다. 블록을 두 번 연속 놓으며 매번 줄을 지우면 ‘2 COMBO’, 즉 2연쇄입니다. 첫 제거는 연쇄 시작이며, 다음 제거부터 큰 COMBO 숫자가 표시됩니다.</p></article><article><h3>연쇄는 시간으로 끊기지 않습니다</h3><p>줄을 지운 다음 블록으로도 줄을 지우면 연쇄가 이어집니다. 줄을 못 지우면 끝나지만, 연쇄 보호가 있으면 한 연쇄에서 딱 한 번 유지합니다. 기다린 시간이나 팝업이 사라진 것은 종료 조건이 아닙니다. 6연쇄부터 피해 보너스는 최대지만 숫자는 계속 올라갑니다.</p></article><article><h3>피해 · 전하 · 높이</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 줄 제거 피해 보너스는 합산하고 연쇄 배율을 곱합니다. 전하는 다음 줄 제거에 전부 쓰며 최대 4개입니다. 전하와 선제 타격의 추가 피해에는 연쇄 배율을 곱하지 않습니다. 높이는 이번 블록을 놓은 뒤 줄이 사라지기 전에 셉니다.</p></article><article><h3>방어 차단과 방해 행 제거</h3><p>방어 차단은 공격 예고가 01일 때 이번 블록으로 2줄 이상을 지우면 아직 올라오지 않은 방해를 1행 막습니다. 방해 행 제거는 2·3줄을 지울 때 이미 보드에 올라와 있는 회색 행을 1행 없앱니다. 서로 다른 시점에 작동합니다.</p></article><article><h3>회색 행과 세 번째 공격</h3><p>한 번에 올라오는 회색 행들의 빈칸은 같은 열입니다. 다음 공격은 독립적인 랜덤이므로 같은 열이 연속될 수도 있습니다. 주기적 증원을 선택했다면 매 3번째 공격에 1행이 더해집니다. 예를 들어 3·6·9·12번째 공격입니다. 추가 행을 포함한 실제 모양과 공격 번호를 오른쪽 예고에서 확인하세요.</p></article><article><h3>죽어도 다른 조합으로 재도전</h3><p>사망한 구역보다 하나 낮은 구역부터 시작할 수 있습니다. 9구역 사망 → 8구역 재도전이라면, 능력을 초기화하고 1~7구역 보상에 해당하는 일곱 번의 선택을 합니다. 각 선택 화면에서 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
+  modal(`<div class="guide-header"><div><p class="modal-eyebrow">FIELD GUIDE / VER ${RULES_VERSION}</p><h2>버프 · 디버프 도감</h2><p class="modal-copy">조건부터 예외까지 읽고, 원하는 조합을 찾아보세요.</p></div><button data-ui="guideClose" type="button">${game?.state.status==='playing'?'전투로 돌아가기':'닫기'}</button></div><nav class="guide-tabs" aria-label="도감 분류"><button data-guide="buffs" aria-pressed="${section==='buffs'}">버프 ${Object.keys(UPGRADES).length}개</button><button data-guide="debuffs" aria-pressed="${section==='debuffs'}">디버프 ${Object.keys(BURDENS).length}개</button><button data-guide="rules" aria-pressed="${section==='rules'}">기본 규칙과 재도전</button></nav>${section==='rules'?rules:`<div class="guide-grid">${cards}</div>`}<div class="modal-actions"><button class="primary" data-ui="guideClose">${game?.state.status==='playing'?'전투로 돌아가기':'처음 화면으로'}</button></div>`,'guide');
 }
 function showHelp(){
   const during=!!game&&game.state.status==='playing';if(during)paused=true;
@@ -1161,7 +1242,7 @@ function showHelp(){
 function showRecords(mode=recordsMode){
   recordsMode=mode;if(game&&game.state.status==='playing')paused=true;
   const raw=readStore(KEY,[]),list=(Array.isArray(raw)?raw:[]).filter(r=>r.version===RULES_VERSION&&(r.mode||'standard')===mode);
-  modal(`<p class="modal-eyebrow">LOCAL RECORDS / VER 2</p><h2>이 기기의 기록</h2><nav class="guide-tabs" aria-label="도전 방식"><button data-records="standard" aria-pressed="${mode==='standard'}">1구역부터 도전</button><button data-records="assisted" aria-pressed="${mode==='assisted'}">중간 구역 재도전</button></nav><p class="modal-copy">두 방식의 기록을 따로 보관합니다. 처치 수에는 실제로 쓰러뜨린 보스만 포함됩니다.</p>${list.length?`<div class="records-scroll"><table class="records-table"><thead><tr><th>#</th><th>시작 → 도달</th><th>처치</th><th>시간</th><th>시드</th></tr></thead><tbody>${list.slice(0,10).map((r,i)=>`<tr><td>${pad(i+1)}</td><td>${r.startStage||1} → ${r.stage||r.cleared+1}</td><td>${r.cleared}개</td><td>${fmtTime(r.seconds)}</td><td>${esc(r.seed)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">아직 끝낸 도전이 없습니다.</p>'}<div class="modal-actions"><button class="primary" data-ui="${game?.state.status==='playing'?'resume':game?'result':'close'}">돌아가기</button></div>`,'records',true);
+  modal(`<p class="modal-eyebrow">LOCAL RECORDS / VER ${RULES_VERSION}</p><h2>이 기기의 기록</h2><nav class="guide-tabs" aria-label="도전 방식"><button data-records="standard" aria-pressed="${mode==='standard'}">1구역부터 도전</button><button data-records="assisted" aria-pressed="${mode==='assisted'}">중간 구역 재도전</button></nav><p class="modal-copy">현재 규칙 ${RULES_VERSION}의 기록만 보여줍니다. 이전 버전 기록도 보관됩니다. 두 도전 방식은 각각 구분하며, 실제로 처치한 보스만 셉니다.</p>${list.length?`<div class="records-scroll"><table class="records-table"><thead><tr><th>#</th><th>시작 → 도달</th><th>처치</th><th>시간</th><th>시드</th></tr></thead><tbody>${list.slice(0,10).map((r,i)=>`<tr><td>${pad(i+1)}</td><td>${r.startStage||1} → ${r.stage||r.cleared+1}</td><td>${r.cleared}개</td><td>${fmtTime(r.seconds)}</td><td>${esc(r.seed)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">아직 끝낸 도전이 없습니다.</p>'}<div class="modal-actions"><button class="primary" data-ui="${game?.state.status==='playing'?'resume':game?'result':'close'}">돌아가기</button></div>`,'records',true);
 }
 function updateUi(){
   const s=game?.state;
@@ -1237,7 +1318,8 @@ function draw(state){
     for(let i=0;i<5;i++){ctx.fillStyle='#18202e';ctx.fillRect(51,240+i*53,66,39);text('?',84,267+i*53,23,'#b2a6c9','center',true);}
     text(`복귀 ${b.obscureRemaining.toFixed(1)}초`,84,532,9,'#c3b0e0','center',true);
   }else s.queue.slice(0,5).forEach((t,i)=>mini(t,84,244+i*53,13,i? .65:1));
-  text('COMBO',x,631,9,'#688393','left',true);text(s.combo?`${s.combo} CHAIN`:'—',x,654,17,s.combo?'#65ddd0':'#435966','left',true);
+  text('COMBO / 연쇄',x,631,9,'#688393','left',true);text(s.combo?`${s.combo}연쇄`:'—',x,654,17,s.combo?'#65ddd0':'#435966','left',true);
+  if(s.combo)text(`연쇄 배율 ×${(1+(.15+.04*s.upgrades.combo)*Math.min(s.combo-1,5)).toFixed(2)}`,x,674,9,'#a3c9c5');
   text('CHARGE',x+166,631,9,'#688393','left',true);for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(x+166+i*25,643,19,6);}
   text(`${s.stage===10?'FINAL STRUCTURE':'HOSTILE STRUCTURE'} / ${pad(s.stage)}`,550,55,9,'#718d9b','left',true);
   text(s.stage===10?'특이점':`구조체 — ${cfg.name}`,550,88,25,'#e5eae5');
@@ -1246,7 +1328,8 @@ function draw(state){
   text(s.stage===10?`PHASE ${b.phase} / 3 · ${PHASE_NAMES[b.phase]}`:b.armor?(b.exposed?'노출 ×1.35':'방어 ×0.65'):'직접 타격 ×1.00',550,133,10,b.exposed?'#efae63':'#839ca7','left',s.stage===10);
   if(b.pendingPhase>b.phase)text(`다음 주기 → ${PHASE_NAMES[b.pendingPhase]}`,895,133,9,'#efae63','right');
   else if(s.stage===10&&b.phase===3)text(obscured?`일식 · NEXT 복귀 ${b.obscureRemaining.toFixed(1)}초`:`다음 일식 ${Math.ceil(b.obscureCooldown||0)}초`,895,133,10,'#c3b0e0','right');
-  const tx=960;text('NEXT ATTACK',tx,183,9,'#8099a6','center',true);text(String(b.remaining).padStart(2,'0'),tx,227,42,b.remaining<=3?'#efae63':'#c6d6d9','center',true);text('블록 고정 후',tx,247,10,'#79919d','center');
+  const tx=960;text(`공격 ${b.attackIndex+1}회째`,tx,160,10,'#a4bac5','center');text('NEXT ATTACK',tx,183,9,'#8099a6','center',true);text(String(b.remaining).padStart(2,'0'),tx,227,42,b.remaining<=3?'#efae63':'#c6d6d9','center',true);text('블록 고정 후',tx,247,10,'#79919d','center');
+  if(b.reinforcementBonus)text('3회마다 증원 +1행',tx,268,10,'#efae63','center');
   text(`${b.holes.length}행 투입`,tx,286,12,'#c9d5d6','center');
   b.holes.forEach((hole,i)=>{for(let col=0;col<10;col++){ctx.fillStyle=col===hole?'#0a1018':'#9c7756';ctx.fillRect(901+col*12,298+i*12,10,9);}ctx.strokeStyle='#71604b';ctx.strokeRect(900,297+i*12,121,11);});
   if(b.response){text(b.windowActive?'대응 창 활성':'마지막 3고정에 대응',tx,365,10,b.windowActive?'#65ddd0':'#667e8c','center');text(`${Math.min(2,b.responseLines)} / 2줄`,tx,387,15,b.responseLines>=2?'#65ddd0':'#d1d9d6','center',true);text('성공 시 방해 1행 감소',tx,407,9,'#647e8e','center');}
@@ -1255,6 +1338,8 @@ function draw(state){
   text(until>0?`장기전까지 ${until}고정`:`과부하 +${b.overload}행`,550,575,11,until<=10?'#efae63':'#718d9d');
   text(`전투 고정 ${b.stageLocks}  /  주기 ${b.K}`,550,595,9,'#4f6c7c','left',true);
   if(s.upgrades.repair)text(`방해 제거 ${s.repairLeft}회 · ${s.repairCooldown?`${s.repairCooldown}고정 대기`:'준비됨'}`,895,595,10,'#73968f','right');
+  if(s.upgrades.guard)text(s.guardLeft?`방어 차단 ${s.guardLeft}회 · ${b.guardReady?'2줄 이상 지우면 1행 차단':'공격 예고 01에서 준비'}`:'방어 차단 사용 완료',550,615,10,b.guardReady?'#65ddd0':'#83a49d');
+  if(s.upgrades.landing||s.burdens.rigidity)text(`착지 여유 ${((s.lockDelayMs??(500+75*(s.upgrades.landing||0)-35*s.burdens.rigidity))/1000).toFixed(3)}초`,895,636,10,'#a7bed2','right');
   text('BUILD',550,636,9,'#4f6c7c','left',true);text(`${count(s.upgrades)} 강화  /  ${count(s.burdens)} 부담`,550,656,12,'#9eafb6');
   if(s.status==='reward'||s.status==='won')text('구조체 붕괴',895,656,11,'#65ddd0','right');
   if(s.upgrades.high||s.upgrades.low){
@@ -1267,6 +1352,7 @@ function draw(state){
     text(`현재 높이 ${height}`,x+cell*10+18,531,10,'#94a9b3');
     text(`배치 후 ${planned}`,x+cell*10+18,549,10,'#c6d8d4');
   }
+  fx.drawCombo(ctx,{x:490,y:185},{reducedMotion:reduced});
 }
 function resize(){const dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);}
 window.addEventListener('resize',resize);resize();

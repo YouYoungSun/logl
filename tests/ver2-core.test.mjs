@@ -19,7 +19,7 @@ function assisted(seed,stage){
 }
 
 test('v2 attack bundles align every hole and independently permit repeated columns',()=>{
-  assert.equal(RULES_VERSION,'2.0.0');
+  assert.equal(RULES_VERSION,'2.0.1');
   for(let stage=1;stage<=10;stage++){
     const g=new Game('aligned');g.state.stage=stage;g._beginStage();
     const samples=[.21,.21,.91];g._garbage=()=>samples.shift();
@@ -90,16 +90,6 @@ test('rerolls reproduce for the same seed and an identical redraw is repaired de
   assert.equal(g.rerollOffers(),true);
   const identity=offers=>offers.map(o=>o.upgrade+':'+o.burden).sort();
   assert.notDeepEqual(identity(g.state.offers),identity(old));
-});
-
-test('conversion awards fixed rank charges after any qualifying combo and honors grace',()=>{
-  for(const combo of [3,4,8])for(const rank of [1,2,3]){
-    const g=new Game('conversion');g.state.combo=combo;g.state.upgrades.convert=rank;
-    fixture(g);g.act('drop');assert.equal(g.state.charge,rank);
-  }
-  const g=new Game('grace');g.state.combo=5;g.state.upgrades.convert=2;g.state.upgrades.grace=1;
-  fixture(g);g.act('drop');assert.equal(g.state.charge,0);assert.equal(g.state.combo,5);
-  fixture(g);g.act('drop');assert.equal(g.state.charge,2);assert.equal(g.state.combo,0);
 });
 
 test('opening adds flat plus base-stage-HP damage twice and scales before defense and dampening',()=>{
