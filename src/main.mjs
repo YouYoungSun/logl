@@ -44,7 +44,11 @@ const ROLE_LABELS={attack:'공격',defense:'방어',control:'조작'};
 function roleTag(def){return `<span class="ability-role role-${def.category||'attack'}">${ROLE_LABELS[def.category]||'공격'}</span>`;}
 export const getGame=()=>game;
 
-function toast(text){$('toast').textContent=text;$('toast').classList.add('show');toastUntil=performance.now()+2200;}
+function toast(text){
+  // Combat already has dedicated HUD feedback; floating notices obscure it.
+  if(game?.state.status==='playing')return;
+  $('toast').textContent=text;$('toast').classList.add('show');toastUntil=performance.now()+2200;
+}
 function clearInput(){pressed.clear();direction=0;dirAge=0;dirRepeats=0;acc=0;}
 function modal(html,kind,narrow=false){
   modalKind=kind;const panel=$('modalContent');panel.className='modal-content'+(narrow?' narrow':'');panel.innerHTML=html;$('modal').hidden=false;clearInput();
