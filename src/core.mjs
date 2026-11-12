@@ -1,7 +1,7 @@
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 export const WIDTH = 10;
 export const HEIGHT = 20;
-export const RULES_VERSION = '2.0.2';
+export const RULES_VERSION = '2.0.3';
 
 const round = n => Math.floor(n + 0.5);
 const emptyRow = () => Array(WIDTH).fill(null);
@@ -129,7 +129,8 @@ export class Game {
       rebuildTarget:startStage,rebuildStep:0,rebuildTotal:startStage-1,rerollsLeft:0, board:Array.from({length:HEIGHT},emptyRow),
       tags:Array(HEIGHT).fill(null), active:null, queue:[], held:null, canHold:true,
       upgrades:rankMap(UPGRADES), burdens:rankMap(BURDENS), offers:[],
-      stats:{locks:0,lines:0,damage:0,seconds:0,cleared:0,maxCombo:0},
+      stats:{locks:0,lines:0,damage:0,seconds:0,cleared:0,maxCombo:0,maxMomentum:0},
+      momentum:0,momentumTier:0,momentumReason:'',
       combo:0,charge:0,repairLeft:0,guardLeft:0,lockDelayMs:500,reason:'',death:null,tick:0,history:[]
     };
     this._beginStage();
@@ -158,6 +159,7 @@ export class Game {
   _die(reason,detail={}) {
     if (this.state.status==='dead'||this.state.status==='won') return;
     this.state.status='dead';this.state.reason=reason;
+    this.state.momentum=0;this.state.momentumTier=0;this.state.momentumReason='';
     this.state.death={kind:detail.kind||'other',cells:(detail.cells||[]).map(p=>p.slice())};
     this._emit('death',{reason});
   }
@@ -281,6 +283,25 @@ export class Game {
     tags.splice(i,1);tags.unshift(null);
     this._emit('repair',{row:i-offset});return true;
   }
+  _raiseMomentum({lines,combo,charge,height,opening,repaired}) {
+    const s=this.state,u=s.upgrades,reasons=[];
+    let style=lines===4?'compress':lines>=2?'middle':'single';
+    if(u.single&&lines===1)reasons.push('1줄 집중');
+    if(u.middle&&(lines===2||lines===3))reasons.push('다중 공격');
+    if(u.compress&&lines===4)reasons.push('4줄 압축');
+    if((u.combo||u.grace)&&combo>=2){reasons.unshift('연쇄 공격');style='combo';}
+    if(u.opening&&opening){reasons.unshift('선제 타격');style='opening';}
+    if(u.landing){if(!reasons.length)style='landing';reasons.push('착지 보조 빌드');}
+    if(u.low&&height<=6){reasons.unshift('저층 안정');style='low';}
+    if(u.high&&height>=12){reasons.unshift('고층 돌파');style='high';}
+    if(charge>0){reasons.unshift('충전 방출');style='charge';}
+    if(repaired){reasons.unshift('방해 행 복구');style='repair';}
+    if(!reasons.length)reasons.push(`${lines}줄 공격`);
+    s.momentum++;s.momentumTier=s.momentum>=12?4:s.momentum>=8?3:s.momentum>=4?2:1;
+    s.momentumReason=reasons[0];s.stats.maxMomentum=Math.max(s.stats.maxMomentum,s.momentum);
+    this._emit('momentumUp',{value:s.momentum,tier:s.momentumTier,reason:s.momentumReason,reasons,style});
+    return {momentum:s.momentum,momentumTier:s.momentumTier,momentumReason:s.momentumReason,momentumReasons:reasons,style};
+  }
   _lock() {
     const s=this.state,p=s.active,b=s.boss,u=s.upgrades;
     s.stats.locks++;b.stageLocks++;
@@ -296,8 +317,9 @@ export class Game {
     for(const i of indices.slice().reverse()){ext.splice(i,1);tags.splice(i,1);}
     while(ext.length<24){ext.unshift(emptyRow());tags.unshift(null);}
     s.stats.lines+=L;
+    let repaired=false;
     if((L===2||L===3)&&s.repairLeft>0&&b.stageLocks-this._repairAt>=6) {
-      if(this._deleteRepair(ext,tags,4)){s.repairLeft--;this._repairAt=b.stageLocks;}
+      if(this._deleteRepair(ext,tags,4)){s.repairLeft--;this._repairAt=b.stageLocks;repaired=true;}
     }
     s.board=ext.slice(4);s.tags=tags.slice(4);s.active=null;
     if(ext.slice(0,4).some(r=>r.some(c=>c!==null))) {
@@ -317,12 +339,13 @@ export class Game {
       const cfg=this._config();
       const armor=cfg.armor?(b.remaining<=Math.min(cfg.E,b.K-1)?1.35:.65):1;
       const damage=round((([0,10,24,42,64][L]*(1+A)*M)+Q*(3+u.charge)+O)*armor*(1-.04*s.burdens.dampen));
-      this._clears++;
+      const opening=this._clears<2;this._clears++;
       if(cfg.response&&b.remaining<=Math.min(3,b.K-1))b.responseLines+=L;
       const hpBefore=b.hp;b.hp=Math.max(0,b.hp-damage);
       s.stats.damage+=hpBefore-b.hp;
       this._reservePhase();
-      this._emit('clear',{tick:s.tick,rows,lines:L,combo:s.combo,chargeUsed:Q,
+      const momentum=this._raiseMomentum({lines:L,combo:s.combo,charge:Q,height,opening,repaired});
+      this._emit('clear',{tick:s.tick,rows,lines:L,combo:s.combo,chargeUsed:Q,...momentum,
         damage,hpBefore,hpAfter:b.hp,killed:b.hp===0});
       if(b.hp===0){this._victory();return;}
     } else {
@@ -349,6 +372,8 @@ export class Game {
       if(L>=2&&s.guardLeft>0&&holes.length){
         holes=holes.slice(0,-1);s.guardLeft--;b.holes=holes.slice();
         this._emit('guard',{rows:1,remainingUses:s.guardLeft,holes:holes.slice()});
+        s.momentumReason='방해 행 차단';
+        this._emit('momentumStyle',{value:s.momentum,tier:s.momentumTier,reason:s.momentumReason,style:'guard'});
       }
       const alive=this._insertRows(holes);
       let regen=0;

@@ -17,13 +17,14 @@ export class AudioDirector {
   play(kind,power=1,options={}){
     const c=this.ctx;if(!this.enabled||!c||c.state!=='running')return;
     const now=c.currentTime,p=Math.min(4,Math.max(.2,power||1));
+    const momentumTier=Math.min(4,Math.max(0,options.momentumTier||0));
     this.voices=this.voices.filter(v=>!v._finished);
     while(this.voices.length>=4){const old=this.voices.shift();try{old.stop();}catch{}try{old._noise?.stop();}catch{}}
     const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(this.master);
     let duration=.06,volume=.10,from=160,to=80;
     if(kind==='clear'){
       const combo=Math.min(6,Math.max(1,options.combo||1));
-      const semitones=combo>=6?7:combo>=3?4:combo>=2?2:0,ratio=2**(semitones/12);
+      const semitones=(combo>=6?7:combo>=3?4:combo>=2?2:0)+momentumTier,ratio=2**(semitones/12);
       from=600*ratio;to=1000*ratio;duration=combo===3||combo===6?.07:.055;volume=.035;
     }
     if(kind==='hit'){
@@ -32,16 +33,19 @@ export class AudioDirector {
       [from,to,duration,volume]=profiles[lines];
       // Weight comes from pitch and duration, never unbounded loudness.
       from-=Math.min(6,Math.max(1,options.combo||1))*1.5;
+      from-=momentumTier*6;to*=1-momentumTier*.035;duration+=momentumTier*.012;
     }
     if(kind==='boss'){from=72;to=35;duration=.18;volume=.21;}
     if(kind==='lock'){from=130;to=70;duration=.035;volume=.055;}
     if(kind==='hold'){from=320;to=450;duration=.04;volume=.04;}
-    o.type=kind==='clear'?'sine':'triangle';o.frequency.setValueAtTime(from,now);o.frequency.exponentialRampToValueAtTime(to,now+duration);
+    o.type=kind==='clear'?'sine':kind==='hit'&&momentumTier>=3?'sawtooth':'triangle';
+    if(kind==='hit'&&momentumTier>=3)volume*=.85;
+    o.frequency.setValueAtTime(from,now);o.frequency.exponentialRampToValueAtTime(to,now+duration);
     g.gain.setValueAtTime(.001,now);g.gain.linearRampToValueAtTime(volume,now+.004);g.gain.exponentialRampToValueAtTime(.001,now+duration);
     o.onended=()=>{o._finished=true;o.disconnect();g.disconnect();};o.start(now);o.stop(now+duration+.01);this.voices.push(o);
-    if(kind==='hit'&&(options.lines>=2||!options.lines&&p>=1.2)&&this.noise){
+    if(kind==='hit'&&(options.lines>=2||momentumTier>=3||!options.lines&&p>=1.2)&&this.noise){
       const n=c.createBufferSource(),ng=c.createGain(),f=c.createBiquadFilter();n.buffer=this.noise;
-      o._noise=n;f.type=options.lines>=4?'lowpass':'highpass';f.frequency.value=options.lines>=4?1100:650;
+      o._noise=n;f.type=options.lines>=4||momentumTier>=3?'lowpass':'highpass';f.frequency.value=momentumTier>=3?800:options.lines>=4?1100:650;
       ng.gain.setValueAtTime(options.lines>=4?.045:.025,now);ng.gain.exponentialRampToValueAtTime(.001,now+.075);
       n.connect(f);f.connect(ng);ng.connect(this.master);n.onended=()=>{n.disconnect();f.disconnect();ng.disconnect();};n.start(now);n.stop(now+.08);
     }

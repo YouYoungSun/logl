@@ -12,7 +12,7 @@ export function getViewLayout(viewportWidth=1100,viewportHeight=900,availableWid
   const portrait=viewportWidth<=680;
   if(portrait){
     const width=Math.max(250,Math.min(440,availableWidth)),cell=Math.min(28,(width-110)/10);
-    const board={x:(width-cell*10)/2,y:112,cell,cols:10,rows:20};
+    const board={x:(width-cell*10)/2,y:132,cell,cols:10,rows:20};
     const height=board.y+cell*20+62;
     return {width,height,cssWidth:width,cssHeight:height,portrait,board,boss:{x:8,y:3,w:64,h:64}};
   }
@@ -23,6 +23,9 @@ export function getViewLayout(viewportWidth=1100,viewportHeight=900,availableWid
 const COLORS={I:'#65d8d0',J:'#739fc9',L:'#d7a56e',O:'#ddca91',S:'#88b6a4',T:'#aa97c5',Z:'#c77f82',G:'#566575'};
 const KEY='faultline.records.v2';
 const PHASE_NAMES=['','관측','붕괴','일식'];
+const MOMENTUM_NAMES=['READY','FOCUS','SURGE','BURST','OVERDRIVE'];
+const MOMENTUM_COLORS=['#8ba4b2','#65ddd0','#71d6ff','#b9abff','#f2bbff'];
+let momentumCelebration=null;
 function readStore(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
 function writeStore(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}
 let sound=readStore('faultline.sound',true),reduced=readStore('faultline.motion',matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -64,9 +67,10 @@ function randomSeed(){try{const n=new Uint32Array(1);crypto.getRandomValues(n);r
 export function startRun(seed,options={}){
   const value=(seed??$('seedInput').value).trim()||randomSeed();
   resetReview();game=new Game(value,options);fx.reset(game.state.stage);saved=false;paused=false;previousStatus=game.state.status;recordedActions=[];choiceLocked=false;
+  momentumCelebration=null;
   $('toast').classList.remove('show');toastUntil=0;
   $('liveStatus').textContent=game.state.status==='rebuild'?`${game.state.stage}구역 재도전 준비`: `${game.state.stage}구역 전투 시작`;
-  pendingHp=[];hpTrail=game.state.boss?.maxHp||0;clearInput();closeModal();$('startScreen').hidden=true;
+  pendingHp=[];hpTrail=game.state.boss?.maxHp||0;clearInput();closeModal();$('startScreen').hidden=true;resize();
   audio.unlock();updateUi();
   if(game.state.status==='rebuild'){paused=true;showReward();}else canvas.focus({preventScroll:true});
 }
@@ -76,7 +80,7 @@ function beginPrepared(){
   fx.reset(game.state.stage);pendingHp=[];hpTrail=game.state.boss.maxHp;paused=false;previousStatus='playing';closeModal();
   onEvents(game.drainEvents());audio.unlock();updateUi();toast(`${game.state.stage}구역 재도전 시작`);
 }
-function goHome(){resetReview();game=null;paused=false;previousStatus='';fx.reset(0);closeModal();$('startScreen').hidden=false;updateUi();}
+function goHome(){resetReview();game=null;paused=false;previousStatus='';momentumCelebration=null;fx.reset(0);closeModal();$('startScreen').hidden=false;updateUi();}
 function act(action){
   if(!game||paused||modalKind||game.state.status!=='playing')return false;
   const ok=game.act(action);if(ok){recordedActions.push({tick:game.tick,action});if(action==='hold')audio.play('hold');}
@@ -85,10 +89,15 @@ function act(action){
 function onEvents(events){
   if(!events.length)return;fx.consume(events);
   for(const e of events){
+    if(e.type==='momentumUp'&&[1,4,8,12].includes(e.value)){
+      momentumCelebration={tier:e.tier,born:fx.time};
+      const message=`기세 ${e.value} · ${MOMENTUM_NAMES[e.tier]} · ${e.reason}`;
+      toast(message);$('liveStatus').textContent=message;
+    }
     if(e.type==='clear')pendingHp.push({at:fx.time+.18,hp:e.hpAfter});
     if(e.type==='lock'&&!e.lines)audio.play('lock');
     if(e.type==='bossAttack'&&e.regen)hpTrail=Math.max(hpTrail,game.state.boss.hp);
-    if(e.type==='death'){$('liveStatus').textContent=e.reason;beginDeathReview();}
+    if(e.type==='death'){momentumCelebration=null;$('liveStatus').textContent=e.reason;beginDeathReview();}
     if(e.type==='stageClear')$('liveStatus').textContent=`${e.stage}구역 돌파`;
     if(e.type==='guard'){const message=`방해 1행 차단 · 남은 ${e.remainingUses}회`;toast(message);$('liveStatus').textContent=message;}
     if(e.type==='comboProtected')$('liveStatus').textContent='연쇄 보호를 사용했습니다. 연쇄는 유지됩니다.';
@@ -122,7 +131,7 @@ function pause(){
 function resume(){paused=false;closeModal();audio.unlock();}
 function tags(state){return Object.entries(state.upgrades).filter(([,r])=>r).map(([k,r])=>`<span class="tag">${UPGRADES[k].label} ${r}</span>`).join('')+Object.entries(state.burdens).filter(([,r])=>r).map(([k,r])=>`<span class="tag bad">${BURDENS[k].label} ${r}</span>`).join('');}
 function example(def,rank){return def.example?`<details class="ability-example"><summary>예시 보기</summary><p>${esc(def.example(rank))}</p></details>`:'';}
-function glossary(){return '<details class="ability-glossary"><summary>기본 용어 보기</summary><p><b>고정:</b> 떨어지던 블록을 놓아 위치가 확정되는 것.<br><b>연쇄:</b> 블록을 놓을 때마다 계속 줄을 지우는 것. 기본적으로 한 번 못 지우면 끝납니다.<br><b>전하:</b> 다음 줄 제거에 모두 사용하는 추가 공격 자원. 최대 4개.<br><b>높이:</b> 바닥부터 가장 높은 블록까지의 칸 수. 이번에 놓을 블록도 포함해 판정합니다.</p></details>';}
+function glossary(){return '<details class="ability-glossary"><summary>기본 용어 보기</summary><p><b>고정:</b> 떨어지던 블록을 놓아 위치가 확정되는 것.<br><b>연쇄:</b> 블록을 놓을 때마다 계속 줄을 지우는 것. 기본적으로 한 번 못 지우면 끝납니다.<br><b>기세:</b> 줄 제거 한 번에 +1. 못 지우거나 구역을 넘어도 유지되는 연출 지표이며 피해량은 바뀌지 않습니다.<br><b>전하:</b> 다음 줄 제거에 모두 사용하는 추가 공격 자원. 최대 4개.<br><b>높이:</b> 바닥부터 가장 높은 블록까지의 칸 수. 이번에 놓을 블록도 포함해 판정합니다.</p></details>';}
 function choiceCards(s,next){
   return s.offers.map((o,i)=>{
     const ur=s.upgrades[o.upgrade]+1,br=s.burdens[o.burden]+1;
@@ -145,7 +154,7 @@ function showPrepared(){
 }
 function saveRecord(){
   if(saved)return;saved=true;const s=game.state;
-  const row={seed:game.seed,mode:s.mode||'standard',startStage:s.startStage||1,stage:s.stage,cleared:s.stats.cleared,progress:s.status==='won'?1:1-s.boss.hp/s.boss.maxHp,locks:s.stats.locks,seconds:s.stats.seconds,lines:s.stats.lines,version:RULES_VERSION,at:Date.now()};
+  const row={seed:game.seed,mode:s.mode||'standard',startStage:s.startStage||1,stage:s.stage,cleared:s.stats.cleared,progress:s.status==='won'?1:1-s.boss.hp/s.boss.maxHp,locks:s.stats.locks,seconds:s.stats.seconds,lines:s.stats.lines,maxMomentum:s.stats.maxMomentum,version:RULES_VERSION,at:Date.now()};
   const old=readStore(KEY,[]);const list=(Array.isArray(old)?old:[]).filter(x=>x&&typeof x==='object');list.push(row);
   list.sort((a,b)=>b.cleared-a.cleared||b.progress-a.progress||a.locks-b.locks||a.seconds-b.seconds);
   const versions=[...new Set(list.map(r=>r.version))];
@@ -153,7 +162,7 @@ function saveRecord(){
 }
 function showResult(){
   const s=game.state,won=s.status==='won',target=Math.max(1,s.stage-1),assisted=s.mode==='assisted';saveRecord();
-  modal(`<p class="modal-eyebrow">${won?'ALL SECTORS CLEARED':'RUN TERMINATED'} / ${assisted?'중간 구역 재도전':'1구역부터 도전'}</p><h2>${won?'단층을 돌파했다.':'다시 도전할 수 있습니다.'}</h2><p class="modal-copy">${won?'최종 구조체를 무너뜨렸습니다.':esc(s.reason)}<br>${assisted?`${s.startStage}구역에서 시작한 도전입니다. 생략한 구역의 처치 수는 기록에 포함하지 않습니다.`:'1구역부터 진행한 도전입니다.'}</p><div class="stat-grid"><div><b>${s.stats.cleared}개</b><small>이번에 처치한 보스</small></div><div><b>${s.stage}구역</b><small>${won?'최종 돌파':'도달 구역'}</small></div><div><b>${fmtTime(s.stats.seconds)}</b><small>활성 전투 시간</small></div></div><div class="loadout-summary">${tags(s)}</div><p class="note">최대 연쇄 ${s.stats.maxCombo} · 제거 ${s.stats.lines}줄 · 실제 피해 ${s.stats.damage.toLocaleString()}<br>SEED ${esc(game.seed)} · 기록은 도전 방식별로 이 기기에 저장됩니다.</p><div class="retry-options"><button class="primary" data-ui="retry"><b>1구역부터 새로 도전</b><small>능력을 초기화하고 같은 시드로 다시 시작</small></button>${!won&&target>1?`<button class="retry-assisted" data-ui="previous"><b>${target}구역부터 재도전</b><small>능력을 새로 ${target-1}번 선택한 뒤 시작</small></button>`:''}</div>${!won?`<p class="note">${target>1?'한 구역 전부터 다시 도전하며 다른 능력 조합을 만들 수 있습니다.':'1·2구역에서 사망하면 1구역부터 다시 시작합니다.'}</p>`:''}<div class="modal-actions"><button data-ui="new">새 시드로 1구역부터</button><button data-ui="records">기록 보기</button><button data-ui="home">처음 화면으로</button></div>`,'result',true);
+  modal(`<p class="modal-eyebrow">${won?'ALL SECTORS CLEARED':'RUN TERMINATED'} / ${assisted?'중간 구역 재도전':'1구역부터 도전'}</p><h2>${won?'단층을 돌파했다.':'다시 도전할 수 있습니다.'}</h2><p class="modal-copy">${won?'최종 구조체를 무너뜨렸습니다.':esc(s.reason)}<br>${assisted?`${s.startStage}구역에서 시작한 도전입니다. 생략한 구역의 처치 수는 기록에 포함하지 않습니다.`:'1구역부터 진행한 도전입니다.'}</p><div class="stat-grid"><div><b>${s.stats.cleared}개</b><small>이번에 처치한 보스</small></div><div><b>${s.stage}구역</b><small>${won?'최종 돌파':'도달 구역'}</small></div><div><b>${fmtTime(s.stats.seconds)}</b><small>활성 전투 시간</small></div></div><div class="loadout-summary">${tags(s)}</div><p class="note">최고 기세 ${s.stats.maxMomentum||0} · 최대 연쇄 ${s.stats.maxCombo} · 제거 ${s.stats.lines}줄 · 실제 피해 ${s.stats.damage.toLocaleString()}<br>SEED ${esc(game.seed)} · 기록은 도전 방식별로 이 기기에 저장됩니다.</p><div class="retry-options"><button class="primary" data-ui="retry"><b>1구역부터 새로 도전</b><small>능력을 초기화하고 같은 시드로 다시 시작</small></button>${!won&&target>1?`<button class="retry-assisted" data-ui="previous"><b>${target}구역부터 재도전</b><small>능력을 새로 ${target-1}번 선택한 뒤 시작</small></button>`:''}</div>${!won?`<p class="note">${target>1?'한 구역 전부터 다시 도전하며 다른 능력 조합을 만들 수 있습니다.':'1·2구역에서 사망하면 1구역부터 다시 시작합니다.'}</p>`:''}<div class="modal-actions"><button data-ui="new">새 시드로 1구역부터</button><button data-ui="records">기록 보기</button><button data-ui="home">처음 화면으로</button></div>`,'result',true);
 }
 function showBuild(){
   if(!game)return;paused=true;const s=game.state;
@@ -184,7 +193,7 @@ function showGuide(section=guideSection){
   guideSection=section;if(game?.state.status==='playing')paused=true;
   const defs=section==='debuffs'?BURDENS:UPGRADES,bad=section==='debuffs';
   const cards=Object.entries(defs).map(([key,def])=>`<article class="guide-card ${bad?'bad':''}"><span class="effect-heading ${bad?'debuff-heading':'buff-heading'}">${bad?'− 디버프 · 불이익':'＋ 버프 · 유리한 효과'}</span>${bad?'':roleTag(def)}<h3>${esc(def.label)}</h3>${def.trigger?`<p class="guide-trigger">발동 조건 · ${esc(def.trigger)}</p>`:''}<div class="guide-levels">${Array.from({length:def.max},(_,i)=>`<p><b>Lv.${i+1}</b> ${esc(def.description(i+1))}</p>`).join('')}</div><div class="guide-example"><b>구체적인 예시 · 1레벨 기준</b><p>${esc(def.example?.(1)||'')}</p></div><p class="guide-note"><b>알아두기</b><br>${esc(GUIDE_NOTES[key]||'')}</p></article>`).join('');
-  const rules=`<div class="guide-rules"><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>세 카드 중 하나를 선택하면 좋은 효과와 불이익을 함께 받습니다. 다음 구역부터 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>공격 · 방어 · 조작</h3><p>공격은 보스에게 주는 피해를, 방어는 회색 행을 막거나 지우는 능력을, 조작은 착지 후 움직일 여유를 늘립니다. 선택 가능한 후보가 있으면 공격 1장과 방어·조작 중 1장을 포함합니다. 세 번째는 자유롭게 추첨합니다.</p></article><article><h3>2줄 제거와 2 COMBO는 다릅니다</h3><p>한 블록으로 한 번에 2줄을 지우면 ‘2줄 제거’입니다. 블록을 두 번 연속 놓으며 매번 줄을 지우면 ‘2 COMBO’, 즉 2연쇄입니다. 첫 제거는 연쇄 시작이며, 다음 제거부터 큰 COMBO 숫자가 표시됩니다.</p></article><article><h3>연쇄는 시간으로 끊기지 않습니다</h3><p>줄을 지운 다음 블록으로도 줄을 지우면 연쇄가 이어집니다. 줄을 못 지우면 끝나지만, 연쇄 보호가 있으면 한 연쇄에서 딱 한 번 유지합니다. 기다린 시간이나 팝업이 사라진 것은 종료 조건이 아닙니다. 6연쇄부터 피해 보너스는 최대지만 숫자는 계속 올라갑니다.</p></article><article><h3>피해 · 전하 · 높이</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 줄 제거 피해 보너스는 합산하고 연쇄 배율을 곱합니다. 전하는 다음 줄 제거에 전부 쓰며 최대 4개입니다. 전하와 선제 타격의 추가 피해에는 연쇄 배율을 곱하지 않습니다. 높이는 이번 블록을 놓은 뒤 줄이 사라지기 전에 셉니다.</p></article><article><h3>방어 차단과 방해 행 제거</h3><p>방어 차단은 공격 예고가 01일 때 이번 블록으로 2줄 이상을 지우면 아직 올라오지 않은 방해를 1행 막습니다. 방해 행 제거는 2·3줄을 지울 때 이미 보드에 올라와 있는 회색 행을 1행 없앱니다. 서로 다른 시점에 작동합니다.</p></article><article><h3>회색 행과 세 번째 공격</h3><p>한 번에 올라오는 회색 행들의 빈칸은 같은 열입니다. 다음 공격은 독립적인 랜덤이므로 같은 열이 연속될 수도 있습니다. 주기적 증원을 선택했다면 매 3번째 공격에 1행이 더해집니다. 예를 들어 3·6·9·12번째 공격입니다. 추가 행을 포함한 실제 모양과 공격 번호를 오른쪽 예고에서 확인하세요.</p></article><article><h3>죽어도 다른 조합으로 재도전</h3><p>사망한 구역보다 하나 낮은 구역부터 시작할 수 있습니다. 9구역 사망 → 8구역 재도전이라면, 능력을 초기화하고 1~7구역 보상에 해당하는 일곱 번의 선택을 합니다. 각 선택 화면에서 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
+  const rules=`<div class="guide-rules"><article><h3>콤보가 끊겨도 기세는 계속됩니다</h3><p>줄을 한 번 지울 때 기세 +1입니다. 1줄과 4줄 모두 한 번이며, 여러 능력이 함께 발동해도 중복으로 올리지 않습니다. 블록을 쌓는 동안, 연쇄 종료, 구역 이동에도 유지됩니다. 새 도전·사망·중간 구역 재도전은 0부터 시작하고 준비 카드 선택으로는 오르지 않습니다. 기세는 연출 지표이며 피해량은 바뀌지 않습니다.</p></article><article><h3>기세 1 / 4 / 8 / 12</h3><p>FOCUS → SURGE → BURST → OVERDRIVE로 외곽 왕관·궤도·탄의 실루엣과 폭발이 커집니다. 최고 단계에서도 숫자는 계속 쌓이지만 광량과 입자 수에는 상한이 있습니다. 예: 1줄 제거 → 못 지움 → 2줄 제거는 콤보는 새로 시작하지만 기세는 1 → 2로 이어집니다.</p></article><article><h3>내 빌드의 성공은 어떻게 보이나요?</h3><p>1줄 강화는 1줄 집중, 2·3줄 강화는 다중 공격, 4줄 강화는 압축 공격으로 표시됩니다. 전하를 소비하면 충전 방출, 높이 조건을 맞추면 고층 돌파·저층 안정, 실제 방해를 막거나 지우면 차단·복구로 강조합니다. 착지 보조 빌드도 줄 제거로 동일하게 +1을 얻습니다. 기다리기·착지·홀드만으로는 기세가 오르지 않습니다.</p></article><article><h3>한 번의 선택 = 버프 하나 + 디버프 하나</h3><p>세 카드 중 하나를 선택하면 좋은 효과와 불이익을 함께 받습니다. 다음 구역부터 적용되고 이후에도 누적됩니다. 같은 능력을 다시 고르면 레벨이 오릅니다.</p></article><article><h3>공격 · 방어 · 조작</h3><p>공격은 보스에게 주는 피해를, 방어는 회색 행을 막거나 지우는 능력을, 조작은 착지 후 움직일 여유를 늘립니다. 선택 가능한 후보가 있으면 공격 1장과 방어·조작 중 1장을 포함합니다. 세 번째는 자유롭게 추첨합니다.</p></article><article><h3>2줄 제거와 2 COMBO는 다릅니다</h3><p>한 블록으로 한 번에 2줄을 지우면 ‘2줄 제거’입니다. 블록을 두 번 연속 놓으며 매번 줄을 지우면 ‘2 COMBO’, 즉 2연쇄입니다. 첫 제거는 연쇄 시작이며, 다음 제거부터 큰 COMBO 숫자가 표시됩니다.</p></article><article><h3>연쇄는 시간으로 끊기지 않습니다</h3><p>줄을 지운 다음 블록으로도 줄을 지우면 연쇄가 이어집니다. 줄을 못 지우면 끝나지만, 연쇄 보호가 있으면 한 연쇄에서 딱 한 번 유지합니다. 기다린 시간이나 팝업이 사라진 것은 종료 조건이 아닙니다. 6연쇄부터 피해 보너스는 최대지만 숫자는 계속 올라갑니다.</p></article><article><h3>피해 · 전하 · 높이</h3><p>1·2·3·4줄 기본 피해는 10 / 24 / 42 / 64입니다. 줄 제거 피해 보너스는 합산하고 연쇄 배율을 곱합니다. 전하는 다음 줄 제거에 전부 쓰며 최대 4개입니다. 전하와 선제 타격의 추가 피해에는 연쇄 배율을 곱하지 않습니다. 높이는 이번 블록을 놓은 뒤 줄이 사라지기 전에 셉니다.</p></article><article><h3>방어 차단과 방해 행 제거</h3><p>방어 차단은 공격 예고가 01일 때 이번 블록으로 2줄 이상을 지우면 아직 올라오지 않은 방해를 1행 막습니다. 방해 행 제거는 2·3줄을 지울 때 이미 보드에 올라와 있는 회색 행을 1행 없앱니다. 서로 다른 시점에 작동합니다.</p></article><article><h3>회색 행과 세 번째 공격</h3><p>한 번에 올라오는 회색 행들의 빈칸은 같은 열입니다. 다음 공격은 독립적인 랜덤이므로 같은 열이 연속될 수도 있습니다. 주기적 증원을 선택했다면 매 3번째 공격에 1행이 더해집니다. 예를 들어 3·6·9·12번째 공격입니다. 추가 행을 포함한 실제 모양과 공격 번호를 오른쪽 예고에서 확인하세요.</p></article><article><h3>죽어도 다른 조합으로 재도전</h3><p>사망한 구역보다 하나 낮은 구역부터 시작할 수 있습니다. 9구역 사망 → 8구역 재도전이라면, 능력을 초기화하고 1~7구역 보상에 해당하는 일곱 번의 선택을 합니다. 각 선택 화면에서 무료 새로고침이 한 번 있습니다.</p></article><article><h3>최종 보스 · 세 페이즈</h3><p>10구역은 관측 → 붕괴 → 일식으로 진행됩니다. 체력 70%·35% 이하에서 다음 공격 주기에 페이즈가 바뀝니다. 붕괴부터 간헐적인 진동이 생기고, 일식에서는 진입 시와 이후 12초마다 3초간 NEXT가 가려집니다. 현재 블록·홀드·공격 예고는 계속 보입니다. 효과 감소 설정은 진동을 끄고 암전을 약하게 합니다.</p></article></div>`;
   modal(`<div class="guide-header"><div><p class="modal-eyebrow">FIELD GUIDE / VER ${RULES_VERSION}</p><h2>버프 · 디버프 도감</h2><p class="modal-copy">조건부터 예외까지 읽고, 원하는 조합을 찾아보세요.</p></div><button data-ui="guideClose" type="button">${game?.state.status==='playing'?'전투로 돌아가기':'닫기'}</button></div><nav class="guide-tabs" aria-label="도감 분류"><button data-guide="buffs" aria-pressed="${section==='buffs'}">버프 ${Object.keys(UPGRADES).length}개</button><button data-guide="debuffs" aria-pressed="${section==='debuffs'}">디버프 ${Object.keys(BURDENS).length}개</button><button data-guide="rules" aria-pressed="${section==='rules'}">기본 규칙과 재도전</button></nav>${section==='rules'?rules:`<div class="guide-grid">${cards}</div>`}<div class="modal-actions"><button class="primary" data-ui="guideClose">${game?.state.status==='playing'?'전투로 돌아가기':'처음 화면으로'}</button></div>`,'guide');
 }
 function showHelp(){
@@ -251,6 +260,31 @@ function draw(state){
   if(LAYOUT.portrait){drawPortrait(state);return;}
   drawDesktop(state);
 }
+function drawMomentum(s,compact=false){
+  const value=s.momentum||0,tier=s.momentumTier||0,color=MOMENTUM_COLORS[tier],name=MOMENTUM_NAMES[tier];
+  if(compact){
+    const {x,y,cell}=LAYOUT.board,bottom=y+cell*20;
+    text('기세 · 연출',x,bottom+12,9,'#b2c7d3');text(String(value),x,bottom+38,27,color,'left',true);
+    text(name,x+64,bottom+20,15,color,'left',true);
+    text('피해량 변화 없음',x+64,bottom+35,9,'#97afbe');
+    const step=Math.max(80,Math.min(168,cell*10-64))/4;
+    for(let i=0;i<4;i++){ctx.fillStyle=i<tier?color:'#243240';ctx.fillRect(x+64+i*step,bottom+41,step-5,3);}
+    const c=fx.comboFeedback,age=fx.time-c.noticeAt;
+    text(s.combo?`${s.combo} COMBO · ${s.combo}연쇄`:'콤보 대기',x,bottom+57,11,s.combo?'#65ddd0':'#8ca4b2');
+    const notice=c.kind==='protected'&&age<1.1?'연쇄 보호 사용':c.kind==='ended'&&age<1.1?'연쇄 종료':s.momentumReason||'줄 제거마다 +1';
+    text(notice,W-x,bottom+57,10,'#b9c9d1','right');return;
+  }
+  text('MOMENTUM / 기세 · 연출',550,688,11,'#a9c4d0','left',true);
+  text(String(value),550,739,44,color,'left',true);text(name,630,721,25,color,'left',true);
+  text(s.momentumReason||'줄을 지워 기세를 쌓으세요',630,743,11,'#b2c8d4');
+  text('구역을 넘어 유지 · 피해량 변화 없음',550,764,10,'#9bb4c2');
+  for(let i=0;i<4;i++){ctx.fillStyle=i<tier?color:'#243240';ctx.fillRect(550+i*88,777,79,5);}
+  const age=momentumCelebration?fx.time-momentumCelebration.born:2;
+  if(momentumCelebration&&age<.9){
+    ctx.save();ctx.globalAlpha=Math.min(1,(.9-age)*3);
+    text(name,720,540,32,color,'center',true);text('기세 단계 상승',720,560,11,'#e2e9f2','center');ctx.restore();
+  }
+}
 function drawPortrait(s){
   ctx.fillStyle='#0a1018';ctx.fillRect(0,0,W,H);
   if(!s||!s.boss||s.status==='rebuild'||s.status==='ready')return;
@@ -262,7 +296,7 @@ function drawPortrait(s){
     recoilY:fx.recoil.y*.3,flash:fx.flash,death:fx.death,reducedMotion:reduced};
   drawBoss(ctx,opts);
   if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){ctx.fillStyle=reduced?'#03081022':'#03081066';ctx.fillRect(4,2,72,66);}
-  fx.drawAura(ctx,LAYOUT,{combo:s.combo,danger,reducedMotion:reduced,compact:true});
+  fx.drawAura(ctx,LAYOUT,{momentum:s.momentum,momentumTier:s.momentumTier,combo:s.combo,danger,reducedMotion:reduced,compact:true,auraTopSpace:24});
   paintBoard(s,board);
   fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced,compact:true});
   // Forecasts are always painted above attack particles and remain readable.
@@ -294,6 +328,7 @@ function drawPortrait(s){
   if(obscured)text(`${b.obscureRemaining.toFixed(1)}초`,right,y+268,9,'#c3b0e0','center');
   text('CHARGE',left,y+133,8,'#9db6c1','center',true);
   for(let i=0;i<4;i++){ctx.fillStyle=i<s.charge?'#efae63':'#25343e';ctx.fillRect(left-14,y+146+i*13,28,7);}
+  if(s.upgrades.landing||s.burdens.rigidity)text(`${(s.lockDelayMs/1000).toFixed(3)}초`,left,y+213,8,'#98b6c6','center');
   if(s.upgrades.guard){text('차단',left,y+235,9,'#91bbaa','center');text(`${s.guardLeft}회`,left,y+252,11,'#91bbaa','center');}
   const top=s.board.findIndex(row=>row.some(Boolean)),height=top<0?0:20-top;
   if(s.upgrades.high||s.upgrades.low){
@@ -303,12 +338,9 @@ function drawPortrait(s){
     }
   }
   function colorMarker(yy,label,limit){line(x-6,yy,x,yy,label==='고층'?'#efae63':'#65ddd0');text(`${label}${limit}`,x-7,yy-4,8,'#9db7c1','right');}
-  const bottom=y+20*cell;
-  fx.drawCombo(ctx,{x:W/2,y:bottom+26},{compact:true,reducedMotion:reduced});
-  if(!s.combo&&fx.comboFeedback.kind!=='ended')text(`${count(s.upgrades)}강화 · ${count(s.burdens)}부담`,W/2,bottom+28,11,'#9db7c1','center');
-  const seconds=(s.lockDelayMs/1000).toFixed(3);
-  text(s.upgrades.landing||s.burdens.rigidity?`착지 ${seconds}초`:`고정 ${b.stageLocks}`,x,bottom+54,9,'#91acb7');
-  text(b.overload?`과부하 +${b.overload}행`:`장기전 ${Math.max(0,cfg.T-b.stageLocks)}고정 전`,W-x,bottom+54,9,'#a9bbc4','right');
+  text('장기전',left,y+cell*20-45,8,'#9db5c3','center');
+  text(b.overload?`+${b.overload}행`:`${Math.max(0,cfg.T-b.stageLocks)}`,left,y+cell*20-29,10,'#b3c6d1','center');
+  drawMomentum(s,true);
 }
 function drawDesktop(state){
   background(fx.time);
@@ -324,11 +356,11 @@ function drawDesktop(state){
   if(s.stage===10&&b.phase===3&&b.obscureRemaining>0){
     const veil=ctx.createRadialGradient(720,335,25,720,335,260);veil.addColorStop(0,reduced?'#02040b55':'#02040bbb');veil.addColorStop(1,'#02040b00');ctx.fillStyle=veil;ctx.fillRect(480,145,410,420);
   }
-  fx.drawAura?.(ctx,LAYOUT,{combo:s.combo,danger:s.board.slice(0,5).some(r=>r.some(Boolean)),reducedMotion:reduced});
+  fx.drawAura?.(ctx,LAYOUT,{momentum:s.momentum,momentumTier:s.momentumTier,combo:s.combo,danger:s.board.slice(0,5).some(r=>r.some(Boolean)),reducedMotion:reduced});
   paintBoard(s,LAYOUT.board);
   fx.draw(ctx,LAYOUT,bossAnchor(opts),{reducedMotion:reduced});
   // HUD is drawn above FX, keeping forecasts and the next queue legible.
-  text(`SECTOR ${pad(s.stage)} / 10`,x,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+cell*10,y-21,11,'#65ddd0','right');
+  text(`SECTOR ${pad(s.stage)} / 10`,10,y-21,11,'#d2e3e4','left',true);text(cfg.name,x+cell*10,y-21,11,'#65ddd0','right');
   text('HOLD',48,80,9,'#708c9b','center',true);ctx.strokeStyle='#293a48';ctx.strokeRect(10,90,76,68);mini(s.held,48,113,14,s.canHold?1:.35);
   if(!s.canHold&&s.held)text('LOCKED',48,174,8,'#6c7e89','center',true);
   text('NEXT',48,226,9,'#708c9b','center',true);
@@ -372,10 +404,11 @@ function drawDesktop(state){
     text(`배치 후 ${planned}`,x+cell*10+18,y+cell*20-24,10,'#c6d8d4');
   }
   fx.drawCombo(ctx,{x:490,y:185},{reducedMotion:reduced});
+  drawMomentum(s);
 }
 function resize(){
   const viewportWidth=globalThis.innerWidth||1100,viewportHeight=globalThis.innerHeight||900;
-  const appWidth=document.querySelector?.('.app')?.clientWidth||Math.min(viewportWidth,1220);
+  const appWidth=Math.min(document.querySelector?.('.app')?.clientWidth||Math.min(viewportWidth,1220),document.documentElement?.clientWidth||viewportWidth);
   const available=Math.max(250,appWidth-(viewportWidth<=680?18:62));
   LAYOUT=getViewLayout(viewportWidth,viewportHeight,available);W=LAYOUT.width;H=LAYOUT.height;
   const dpr=Math.min(2,globalThis.devicePixelRatio||1);canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
