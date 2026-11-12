@@ -80,18 +80,18 @@ test('real four-line removal preserves original row snapshots and applies damage
 });
 
 test('repair deletes only the lowest tagged row after compression and does not inflate damage/lines',()=>{
-  const g=new Game('repair');g.state.upgrades.repair=2;g.state.repairLeft=2;
+  const g=new Game('repair');g.state.upgrades.repair=2;g.state.repairLeft=1;
   clearFixture(g,2);
   g.state.board[17][0]='G';g.state.tags[17]=91;
   g.state.board[15][0]='G';g.state.tags[15]=90;
   g.act('drop');
   const events=g.drainEvents(),repair=events.find(e=>e.type==='repair'),clear=events.find(e=>e.type==='clear');
-  assert.equal(repair.row,19);assert.equal(g.state.repairLeft,1);
+  assert.equal(repair.row,19);assert.equal(g.state.repairLeft,0);
   assert.equal(g.state.tags.includes(91),false);assert.equal(g.state.tags.includes(90),true);
   assert.equal(clear.lines,2);assert.equal(clear.damage,24);assert.equal(g.state.stats.lines,2);
   assert.deepEqual(clear.rows.map(r=>r.row),[18,19]);
   clearFixture(g,2);g.state.tags[10]=92;g.state.board[10][0]='G';g.act('drop');
-  assert.equal(g.state.repairLeft,1,'six-lock cooldown prevents a second proc');
+  assert.equal(g.state.repairLeft,0,'recharging prevents a second proc');
 });
 
 test('above-top blocks may be rescued by a clear, but lockout is resolved before lethal damage',()=>{
@@ -194,7 +194,7 @@ test('next sector starts with an empty board, fresh hold and independent seven-b
   assert.equal(s.stage,2);assert.equal(s.status,'playing');
   assert.ok(s.board.every(row=>row.every(c=>c===null)));
   assert.ok(s.tags.every(t=>t===null));assert.equal(s.held,null);assert.equal(s.canHold,true);
-  assert.equal(s.combo,0);assert.equal(s.charge,0);assert.equal(s.repairLeft,s.upgrades.repair);
+  assert.equal(s.combo,0);assert.equal(s.charge,0);assert.equal(s.repairLeft,s.upgrades.repair?1:0);
   assert.equal(s.boss.stageLocks,0);assert.equal(s.boss.attackIndex,0);
   assert.equal(s.boss.erosionRemaining,s.burdens.erosion);
   assert.equal(s.stats.locks,28);assert.equal(s.stats.lines,9);assert.equal(s.stats.seconds,60);assert.equal(s.stats.damage,150);

@@ -1,9 +1,10 @@
 /** Deterministic, renderer-independent rules for FAULTLINE. */
 export const WIDTH = 10;
 export const HEIGHT = 20;
-export const RULES_VERSION = '2.0.5';
+export const RULES_VERSION = '2.0.6';
 
 const round = n => Math.floor(n + 0.5);
+const defenseCooldown = rank => Math.max(8,14-2*rank);
 const emptyRow = () => Array(WIDTH).fill(null);
 const rankMap = defs => Object.fromEntries(Object.keys(defs).map(k => [k, 0]));
 
@@ -17,9 +18,9 @@ export const UPGRADES = {
   high: { label: '고층 강화', category:'attack', max: 3, trigger:'지우기 전 높이 12칸 이상', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 12칸 이상이면 줄 제거 피해 +${35*r}%.`, example:()=>`높이는 바닥부터 가장 높은 블록까지 셉니다. 이번에 놓은 블록도 포함합니다. 지운 뒤 높이가 낮아져도 이번 공격에는 적용됩니다.` },
   low: { label: '저층 강화', category:'attack', max: 3, trigger:'지우기 전 높이 6칸 이하', description:r=>`줄이 지워지기 직전, 쌓인 최고 높이가 6칸 이하면 줄 제거 피해 +${15*r}%.`, example:()=>`이번 블록을 놓은 뒤 최고 높이가 6칸이면 적용, 7칸이면 미적용입니다. 줄을 지운 뒤의 높이를 기준으로 삼지 않습니다.` },
   opening: { label: '선제 타격', category:'attack', max: 3, trigger:'전투 첫 두 번의 줄 제거', description:r=>`각 전투의 첫 두 번 줄 제거에 각각 추가 피해: ${6*r} + 해당 구역 보스 기본 체력의 ${r}%. 방어와 피해 감소가 적용됩니다.`, example:r=>`10구역 기본 체력 1600에서는 첫 공격과 두 번째 공격에 각각 +${22*r}. 블록을 놓은 횟수가 아닌 줄을 지운 횟수를 셉니다. 보스 체력 증가 부담으로 추가 피해가 늘지는 않습니다.` },
-  guard: { label:'방해 행 차단',max:2,category:'defense',trigger:'공격 예고 01 + 2줄 이상 동시 제거',description:r=>`오른쪽 공격 예고가 01일 때, 이번 블록으로 2줄 이상을 지우면 예정된 회색 방해 행을 1행 막습니다. 전투당 ${r}회.`,example:()=>`예정 2행은 1행으로, 예정 1행은 0행으로 줄입니다. 기존 대응으로 줄인 뒤 추가로 차단하며 실제로 막았을 때만 횟수를 씁니다. 초반 방해 행에는 적용되지 않습니다. 0행이 되어도 보스 공격 번호·체력 회복·페이즈는 정상 진행됩니다.` },
+  guard: { label:'방해 행 차단',max:2,category:'defense',trigger:'공격 예고 01 + 2줄 이상 동시 제거',description:r=>`공격 예고가 01일 때 2줄 이상 지우면 예정 방해를 1행 막습니다. 전투 시작 1회 충전. 사용 후 블록 ${defenseCooldown(r)}개를 놓으면 재충전됩니다. 최대 1회 보유.`,example:r=>`실제로 1행을 막았을 때만 충전을 소비합니다. 이후 블록 ${defenseCooldown(r)}개를 고정하면 다시 사용할 수 있습니다. 예정 1행을 0행으로 막아도 보스 회복·페이즈는 진행되며, 초반 방해에는 적용되지 않습니다.` },
   landing: { label:'착지 보조',max:2,category:'control',trigger:'블록이 착지했을 때',description:r=>`착지 후 자동 고정까지의 여유가 0.5초에서 ${(500+75*r)/1000}초(${500+75*r}ms)로 늘어납니다. 자연 낙하 속도와 즉시 낙하는 그대로입니다.`,example:r=>`착지한 블록을 옆으로 밀거나 회전할 시간이 ${75*r}ms 늘어납니다. 착지 조작 시간 감소 1레벨을 함께 받았다면 실제 여유는 ${500+75*r-35}ms입니다. 움직임으로 고정 시간을 초기화하는 횟수는 기존처럼 최대 15회입니다.` },
-  repair: { label: '방해 행 제거', category:'defense', max: 3, trigger:'2~3줄 동시 제거 + 회색 행 존재', description:r=>`2줄 또는 3줄을 동시에 지우면, 가장 아래의 회색 방해 행을 1개 더 없앱니다. 전투당 ${r}회.${r>1?' 다시 발동하려면 블록 6개를 놓아야 합니다.':''}`, example:()=>`추가로 없앤 회색 행에는 공격 피해나 연쇄가 붙지 않습니다. 지울 방해 행이 없으면 사용 횟수를 소비하지 않습니다.` }
+  repair: { label: '방해 행 제거', category:'defense', max: 3, trigger:'2줄 이상 동시 제거 + 회색 행 존재', description:r=>`2줄 이상 지우면 가장 아래의 회색 방해 행을 1개 더 없앱니다. 전투 시작 1회 충전. 사용 후 블록 ${defenseCooldown(r)}개를 놓으면 재충전됩니다. 최대 1회 보유.`, example:r=>`4줄 제거에도 발동합니다. 실제 회색 행을 없앤 뒤 블록 ${defenseCooldown(r)}개를 고정하면 재충전됩니다. 회색 행이 없으면 충전을 쓰지 않으며, 추가 제거에는 피해·연쇄가 붙지 않습니다.` }
 };
 
 export const BURDENS = {
@@ -182,8 +183,8 @@ export class Game {
     s.boss={hp,maxHp:hp,phase:1,pendingPhase:1,K:0,remaining:0,stageLocks:0,
       attackIndex:0,holes:[],exposed:false,armor:false,windowActive:false,
       responseLines:0,overload:0,guardReady:false,reinforcement:false,reinforcementBonus:0,reinforcementEvery:0,phaseElapsed:0,obscureRemaining:0,obscureCooldown:0};
-    s.combo=0;s.charge=0;s.repairLeft=s.upgrades.repair;s.guardLeft=s.upgrades.guard;s.offers=[];s.canHold=true;
-    this._graceUsed=false;this._clears=0;this._repairAt=-Infinity;
+    s.combo=0;s.charge=0;s.repairLeft=s.upgrades.repair?1:0;s.guardLeft=s.upgrades.guard?1:0;s.offers=[];s.canHold=true;
+    this._graceUsed=false;this._clears=0;this._repairAt=-Infinity;this._guardAt=-Infinity;
     const er=rng(this.seed+':erosion:'+s.stage);
     this._erosionHoles=Array.from({length:3},()=>Math.floor(er()*10));
     s.erosionHoles=this._erosionHoles.slice(0,s.burdens.erosion);
@@ -218,7 +219,15 @@ export class Game {
     const reduction=cfg.response&&b.responseLines>=2?1:0;
     b.holes=this._plannedHoles.slice(0,Math.max(1,this._plannedHoles.length-reduction));
     b.erosionRemaining=Math.max(0,this.state.burdens.erosion-b.stageLocks);
-    this.state.repairCooldown=Math.max(0,6-(b.stageLocks-this._repairAt));
+    this._refreshDefense();
+  }
+  _refreshDefense() {
+    const s=this.state,locks=s.boss.stageLocks;
+    for(const [key,last] of [['repair',this._repairAt],['guard',this._guardAt]]){
+      const rank=s.upgrades[key],left=key+'Left',cooldown=key+'Cooldown';
+      s[cooldown]=rank&&!s[left]?Math.max(0,defenseCooldown(rank)-(locks-last)):0;
+      if(rank&&!s[left]&&s[cooldown]===0)s[left]=1;
+    }
   }
   ghostY() {
     const p=this.state.active;
@@ -305,6 +314,7 @@ export class Game {
   _lock() {
     const s=this.state,p=s.active,b=s.boss,u=s.upgrades;
     s.stats.locks++;b.stageLocks++;
+    this._refreshDefense();
     const ext=[...Array.from({length:4},emptyRow),...s.board.map(r=>r.slice())];
     const tags=[null,null,null,null,...s.tags];
     for(const [x,y] of cells(p))ext[y+4][x]=p.type;
@@ -318,8 +328,8 @@ export class Game {
     while(ext.length<24){ext.unshift(emptyRow());tags.unshift(null);}
     s.stats.lines+=L;
     let repaired=false;
-    if((L===2||L===3)&&s.repairLeft>0&&b.stageLocks-this._repairAt>=6) {
-      if(this._deleteRepair(ext,tags,4)){s.repairLeft--;this._repairAt=b.stageLocks;repaired=true;}
+    if(L>=2&&s.repairLeft>0) {
+      if(this._deleteRepair(ext,tags,4)){s.repairLeft=0;this._repairAt=b.stageLocks;s.repairCooldown=defenseCooldown(u.repair);repaired=true;}
     }
     s.board=ext.slice(4);s.tags=tags.slice(4);s.active=null;
     if(ext.slice(0,4).some(r=>r.some(c=>c!==null))) {
@@ -370,7 +380,7 @@ export class Game {
       this._refreshBoss();
       let holes=b.holes.slice();
       if(L>=2&&s.guardLeft>0&&holes.length){
-        holes=holes.slice(0,-1);s.guardLeft--;b.holes=holes.slice();
+        holes=holes.slice(0,-1);s.guardLeft=0;this._guardAt=b.stageLocks;s.guardCooldown=defenseCooldown(u.guard);b.holes=holes.slice();
         this._emit('guard',{rows:1,remainingUses:s.guardLeft,holes:holes.slice()});
         s.momentumReason='방해 행 차단';
         this._emit('momentumStyle',{value:s.momentum,tier:s.momentumTier,reason:s.momentumReason,style:'guard'});

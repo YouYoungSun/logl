@@ -21,7 +21,7 @@ function prepared(stage=1,upgrades={},burdens={}){
 }
 
 test('v2.0.1 replaces two attack variants with defense/control and honors per-definition burden limits',()=>{
-  assert.equal(RULES_VERSION,'2.0.5');assert.equal(Object.keys(UPGRADES).length,12);
+  assert.equal(RULES_VERSION,'2.0.6');assert.equal(Object.keys(UPGRADES).length,12);
   assert.equal('repeat' in UPGRADES,false);assert.equal('convert' in UPGRADES,false);
   assert.equal(UPGRADES.guard.category,'defense');assert.equal(UPGRADES.landing.category,'control');
   assert.equal(BURDENS.reinforcement.max,1);
@@ -54,7 +54,7 @@ test('guard blocks the last announced row after response, spends one charge and 
   assert.equal(events.find(e=>e.type==='guard').rows,1);
   const attack=events.find(e=>e.type==='bossAttack');
   assert.deepEqual(attack.holes,[]);assert.equal(attack.regen,8);
-  assert.equal(s.guardLeft,1);assert.equal(b.attackIndex,1);assert.equal(b.phase,3);
+  assert.equal(s.guardLeft,0);assert.equal(b.attackIndex,1);assert.equal(b.phase,3);
   assert.ok(events.some(e=>e.type==='phaseChange'&&e.phase===3));
   assert.equal(s.board.flat().filter(c=>c==='G').length,0);
 });
@@ -75,9 +75,9 @@ test('guard only triggers for two-plus clears on the attacking lock and never ca
 test('lethal clears skip guard costs and the pending attack, while a new stage replenishes guard uses',()=>{
   const g=prepared(1,{guard:2},{erosion:1,reinforcement:1});
   g.state.boss.remaining=1;g.state.boss.hp=1;fixture(g,2);g.act('drop');
-  const events=g.drainEvents();assert.equal(g.state.status,'reward');assert.equal(g.state.guardLeft,2);
+  const events=g.drainEvents();assert.equal(g.state.status,'reward');assert.equal(g.state.guardLeft,1);
   assert.equal(events.some(e=>['guard','bossAttack','erosion'].includes(e.type)),false);
-  g.state.guardLeft=0;g.choose(0);assert.equal(g.state.guardLeft,g.state.upgrades.guard);
+  g.state.guardLeft=0;g.choose(0);assert.equal(g.state.guardLeft,g.state.upgrades.guard?1:0);
 });
 
 test('reinforcement forecasts every third attack as an aligned extra row and combines with overload/response/guard',()=>{
